@@ -59,30 +59,37 @@ const dailyVerseSlice = createSlice({
   extraReducers: (builder) => {
     builder
       .addCase(fetchDailyVerses.pending, (state) => {
+        console.log('[dailyVerseSlice] fetchDailyVerses.pending');
         state.status = 'loading';
         state.error = null;
       })
       .addCase(
         fetchDailyVerses.fulfilled,
         (state, action: PayloadAction<WithId<DailyVerse>[]>) => {
+          console.log('[dailyVerseSlice] fetchDailyVerses.fulfilled items', action.payload.length);
           state.items = action.payload;
           state.status = 'succeeded';
         }
       )
       .addCase(fetchDailyVerses.rejected, (state, action) => {
+        console.log('[dailyVerseSlice] fetchDailyVerses.rejected', action.error);
         state.status = 'failed';
         state.error = action.error.message || 'Failed to load';
       })
       .addCase(createDailyVerse.pending, (state) => {
+        console.log('[dailyVerseSlice] createDailyVerse.pending');
         state.error = null;
       })
       .addCase(createDailyVerse.rejected, (state, action) => {
+        console.log('[dailyVerseSlice] createDailyVerse.rejected', action.error);
         state.error = action.error.message || 'Create failed';
       })
       .addCase(editDailyVerse.rejected, (state, action) => {
+        console.log('[dailyVerseSlice] editDailyVerse.rejected', action.error);
         state.error = action.error.message || 'Update failed';
       })
       .addCase(removeDailyVerse.rejected, (state, action) => {
+        console.log('[dailyVerseSlice] removeDailyVerse.rejected', action.error);
         state.error = action.error.message || 'Delete failed';
       });
   },

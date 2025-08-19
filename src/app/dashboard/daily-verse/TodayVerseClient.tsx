@@ -48,7 +48,6 @@ export default function TodayVerseClient() {
     try {
       await dispatch(fetchDailyVerses()).unwrap();
     } catch (e) {
-      console.error(e);
       toast.error("Failed to load verses");
     }
   }, [dispatch]);
@@ -138,7 +137,6 @@ export default function TodayVerseClient() {
       reset();
       closeModal();
     } catch (err) {
-      console.error(err);
       const message = err instanceof Error ? err.message : "Submit failed";
       toast.error(message);
     } finally {
@@ -187,7 +185,6 @@ export default function TodayVerseClient() {
       await dispatch(removeDailyVerse(deleteId)).unwrap();
       toast.success("Verse deleted");
     } catch (e) {
-      console.error(e);
       toast.error("Delete failed");
     } finally {
       setIsDeleteOpen(false);

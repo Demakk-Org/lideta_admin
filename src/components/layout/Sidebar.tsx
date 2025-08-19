@@ -11,9 +11,8 @@ import {
   SpeakerWaveIcon,
   DocumentTextIcon,
 } from '@heroicons/react/24/outline';
-import { signOut } from 'firebase/auth';
-import { auth } from '@/lib/firebase/config';
 import toast from 'react-hot-toast';
+import { signOutUser } from '@/lib/api/auth';
 
 const navigation = [
   { name: 'Daily Bible Verse', href: '/dashboard/daily-verse', icon: BookOpenIcon },
@@ -37,11 +36,9 @@ export default function Sidebar() {
 
   const handleSignOut = async () => {
     try {
-      await signOut(auth);
-      await fetch('/api/session', { method: 'DELETE' });
+      await signOutUser();
       router.replace('/');
     } catch (e) {
-      console.error('Sign out failed', e);
       toast.error('Sign out failed');
     }
   };
