@@ -4,6 +4,7 @@ import AppButton, { AppButtonVariant } from "@/components/ui/AppButton";
 import AppModal from "@/components/ui/AppModal";
 import { useMemo } from "react";
 import type { BibleForm } from "./types";
+import FileUploadButton from "@/components/ui/FileUploadButton";
 
 type Props = {
   isOpen: boolean;
@@ -89,15 +90,14 @@ export default function BiblesModal({ isOpen, form, setForm, submitting, submitL
           </div>
           <div className="sm:col-span-2">
             <label className="block text-sm font-medium text-primary-800">Upload JSON (optional)</label>
-            <input
-              type="file"
-              accept="application/json,.json"
-              onChange={(e) => {
-                const f = (e.target as HTMLInputElement).files?.[0] ?? null;
-                setForm((s) => ({ ...s, file: f }));
-              }}
-              className="mt-1 block w-full text-sm text-primary-800 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-primary-100 file:text-primary-700 hover:file:bg-primary-200"
-            />
+            <div className="mt-1">
+              <FileUploadButton
+                label={form.file ? "Replace File" : "Choose JSON File"}
+                accept="application/json,.json"
+                onSelect={(file) => setForm((s) => ({ ...s, file }))}
+                className="inline-block"
+              />
+            </div>
             <p className="mt-1 text-xs text-primary-600">If a file is selected, it will be uploaded and its URL used as the source.</p>
           </div>
         </div>

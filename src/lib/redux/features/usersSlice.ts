@@ -1,8 +1,8 @@
 import { createAsyncThunk, createSlice, PayloadAction } from '@reduxjs/toolkit';
-import { listUsers } from '@/lib/api/users';
+import { listUsers, updateUser, type WithId, type UserDoc } from '@/lib/api/users';
 
 export type UsersState = {
-  items: any[];
+  items: WithId<UserDoc>[];
   status: 'idle' | 'loading' | 'succeeded' | 'failed';
   error: string | null;
 };
@@ -18,6 +18,14 @@ export const fetchUsers = createAsyncThunk('users/fetchAll', async () => {
   return data;
 });
 
+export const editUser = createAsyncThunk(
+  'users/edit',
+  async ({ id, data }: { id: string; data: Partial<UserDoc> }, { dispatch }) => {
+    await updateUser(id, data);
+    await dispatch(fetchUsers());
+  }
+);
+
 const usersSlice = createSlice({
   name: 'users',
   initialState,
@@ -28,13 +36,16 @@ const usersSlice = createSlice({
         state.status = 'loading';
         state.error = null;
       })
-      .addCase(fetchUsers.fulfilled, (state, action: PayloadAction<any[]>) => {
+      .addCase(fetchUsers.fulfilled, (state, action: PayloadAction<WithId<UserDoc>[]>) => {
         state.items = action.payload;
         state.status = 'succeeded';
       })
       .addCase(fetchUsers.rejected, (state, action) => {
         state.status = 'failed';
         state.error = action.error.message || 'Failed to load';
+      })
+      .addCase(editUser.rejected, (state, action) => {
+        state.error = action.error.message || 'Update failed';
       });
   },
 });

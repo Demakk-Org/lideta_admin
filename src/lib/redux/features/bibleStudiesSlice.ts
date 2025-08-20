@@ -2,7 +2,7 @@ import { createAsyncThunk, createSlice, PayloadAction } from '@reduxjs/toolkit';
 import { listBibleStudies } from '@/lib/api/bibleStudies';
 
 export type BibleStudiesState = {
-  items: any[];
+  items: unknown[];
   status: 'idle' | 'loading' | 'succeeded' | 'failed';
   error: string | null;
 };
@@ -28,7 +28,7 @@ const bibleStudiesSlice = createSlice({
         state.status = 'loading';
         state.error = null;
       })
-      .addCase(fetchBibleStudies.fulfilled, (state, action: PayloadAction<any[]>) => {
+      .addCase(fetchBibleStudies.fulfilled, (state, action: PayloadAction<unknown[]>) => {
         state.items = action.payload;
         state.status = 'succeeded';
       })

@@ -1,3 +1,3 @@
 export async function listGroups() {
-  return [] as any[];
+  return [] as unknown[];
 }

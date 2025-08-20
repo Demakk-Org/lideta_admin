@@ -1,3 +1,3 @@
 export async function listBibleStudies() {
-  return [] as any[];
+  return [] as unknown[];
 }

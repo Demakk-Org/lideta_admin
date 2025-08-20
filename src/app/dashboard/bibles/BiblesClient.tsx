@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { useAppDispatch, useAppSelector } from "@/lib/redux/store";
 import { AppButtonVariant } from "@/components/ui/AppButton";
-import AppModal from "@/components/ui/AppModal";
+import ConfirmDeleteModal from "@/components/ui/ConfirmDeleteModal";
 import BiblesHeader from "./_components/BiblesHeader";
 import BiblesList from "./_components/BiblesList";
 import BiblesModal from "./_components/BiblesModal";
@@ -128,7 +128,7 @@ export default function BiblesClient() {
     try {
       await dispatch(removeBible(deleteId)).unwrap();
       toast.success("Bible deleted");
-    } catch (e) {
+    } catch {
       toast.error("Delete failed");
     } finally {
       setIsDeleteOpen(false);
@@ -156,14 +156,13 @@ export default function BiblesClient() {
 
       <BiblesList items={items} loading={loading} onEdit={handleEdit} onDelete={handleDelete} />
 
-      <AppModal
+      <ConfirmDeleteModal
         open={isDeleteOpen}
-        type="delete"
-        onClose={() => {
+        onCancel={() => {
           setIsDeleteOpen(false);
           setDeleteId(null);
         }}
-        onDelete={confirmDelete}
+        onConfirm={confirmDelete}
       />
     </div>
   );

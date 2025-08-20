@@ -11,7 +11,7 @@ import type { VerseForm } from "./_components/types";
 import { toEthiopian, toGregorian } from "ethiopian-date";
 import { isEthiopianLeapYear, listBibleBooksAmharic } from "@/lib/api/books";
 import { AppButtonVariant } from "@/components/ui/AppButton";
-import AppModal from "@/components/ui/AppModal";
+import ConfirmDeleteModal from "@/components/ui/ConfirmDeleteModal";
 import {
   fetchDailyVerses,
   createDailyVerse,
@@ -47,7 +47,7 @@ export default function TodayVerseClient() {
   const load = useCallback(async () => {
     try {
       await dispatch(fetchDailyVerses()).unwrap();
-    } catch (e) {
+    } catch {
       toast.error("Failed to load verses");
     }
   }, [dispatch]);
@@ -184,7 +184,7 @@ export default function TodayVerseClient() {
     try {
       await dispatch(removeDailyVerse(deleteId)).unwrap();
       toast.success("Verse deleted");
-    } catch (e) {
+    } catch {
       toast.error("Delete failed");
     } finally {
       setIsDeleteOpen(false);
@@ -212,14 +212,13 @@ export default function TodayVerseClient() {
 
       <TodayVerseList items={items} loading={loading} onEdit={handleEdit} onDelete={handleDelete} />
 
-      <AppModal
+      <ConfirmDeleteModal
         open={isDeleteOpen}
-        type="delete"
-        onClose={() => {
+        onCancel={() => {
           setIsDeleteOpen(false);
           setDeleteId(null);
         }}
-        onDelete={confirmDelete}
+        onConfirm={confirmDelete}
       />
     </div>
   );

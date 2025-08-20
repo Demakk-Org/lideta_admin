@@ -2,7 +2,7 @@ import { createAsyncThunk, createSlice, PayloadAction } from '@reduxjs/toolkit';
 import { listGroups } from '@/lib/api/groups';
 
 export type GroupsState = {
-  items: any[];
+  items: unknown[];
   status: 'idle' | 'loading' | 'succeeded' | 'failed';
   error: string | null;
 };
@@ -28,7 +28,7 @@ const groupsSlice = createSlice({
         state.status = 'loading';
         state.error = null;
       })
-      .addCase(fetchGroups.fulfilled, (state, action: PayloadAction<any[]>) => {
+      .addCase(fetchGroups.fulfilled, (state, action: PayloadAction<unknown[]>) => {
         state.items = action.payload;
         state.status = 'succeeded';
       })

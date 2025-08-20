@@ -38,7 +38,7 @@ export default function Sidebar() {
     try {
       await signOutUser();
       router.replace('/');
-    } catch (e) {
+    } catch {
       toast.error('Sign out failed');
     }
   };

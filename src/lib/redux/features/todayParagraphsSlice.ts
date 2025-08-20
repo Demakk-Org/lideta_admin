@@ -2,7 +2,7 @@ import { createAsyncThunk, createSlice, PayloadAction } from '@reduxjs/toolkit';
 import { listTodayParagraphs } from '@/lib/api/todayParagraphs';
 
 export type TodayParagraphsState = {
-  items: any[];
+  items: unknown[];
   status: 'idle' | 'loading' | 'succeeded' | 'failed';
   error: string | null;
 };
@@ -30,7 +30,7 @@ const todayParagraphsSlice = createSlice({
       })
       .addCase(
         fetchTodayParagraphs.fulfilled,
-        (state, action: PayloadAction<any[]>) => {
+        (state, action: PayloadAction<unknown[]>) => {
           state.items = action.payload;
           state.status = 'succeeded';
         }

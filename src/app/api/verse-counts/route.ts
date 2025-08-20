@@ -23,7 +23,7 @@ export async function GET() {
     });
 
     return NextResponse.json(mapping);
-  } catch (e) {
+  } catch {
     return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
 }
