@@ -5,6 +5,7 @@ import AppButton, { AppButtonVariant } from "@/components/ui/AppButton";
 import { NewsContentType, type NewsQuoteValue } from "@/lib/api/news";
 import { uploadNewsImage } from "@/lib/api/storage";
 import FileUploadButton from "@/components/ui/FileUploadButton";
+import DraggableList from "@/components/ui/DraggableList";
 
 export type FormContentItem = { type: NewsContentType; value: string | NewsQuoteValue };
 
@@ -31,9 +32,13 @@ export default function NewsDescriptionBlocksEditor({
           Add Block
         </AppButton>
       </div>
-      <div className="mt-2 space-y-3">
-        {items.map((blk, idx) => (
-          <div key={idx} className="rounded-md border border-primary-200 p-3">
+      <DraggableList
+        items={items}
+        onReorder={(next) => onChange(next)}
+        listClassName="mt-2 space-y-3"
+        itemClassName="rounded-md border border-primary-200 p-3"
+        renderItem={(blk, idx) => (
+          <div key={idx}>
             <div className="flex items-center gap-2">
               <select
                 value={blk.type}
@@ -193,8 +198,8 @@ export default function NewsDescriptionBlocksEditor({
               />
             )}
           </div>
-        ))}
-      </div>
+        )}
+      />
     </div>
   );
 }
