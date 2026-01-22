@@ -8,11 +8,11 @@ import {
 
 export async function DELETE(
   _req: NextRequest,
-  { params }: { params: { deviceId?: string } },
+  context: { params: Promise<{ deviceId: string }> },
 ) {
   try {
     const decodedUser = await authenticateRequest(_req);
-    const deviceId = params.deviceId;
+    const { deviceId } = await context.params;
 
     if (!deviceId) {
       return NextResponse.json({ error: "Missing deviceId" }, { status: 400 });
