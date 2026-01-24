@@ -72,13 +72,18 @@ export async function createAudio(data: AudioDoc): Promise<string> {
       audioBy: normString(data.audioBy),
       uploader: normString(data.uploader),
       description: normString(data.description),
-      tags: Array.isArray(data.tags) ? data.tags.filter(Boolean) : undefined,
       thumbnailUrl: normString(data.thumbnailUrl),
       audioUrl: normString(data.audioUrl),
-      lyrics: normalizeLyrics(data.lyrics),
-      uploadDate: Date.now(),
+      uploadDate: serverTimestamp(),
       createdAt: serverTimestamp(),
     };
+
+    if (data?.tags && data.tags.filter(Boolean).length > 0) {
+      toWrite.tags = data.tags.filter(Boolean);
+    }
+    if (data?.lyrics && data.lyrics.length > 0) {
+      toWrite.lyrics = normalizeLyrics(data.lyrics);
+    }
     const added = await addDoc(colRef, toWrite);
     return added.id;
   } catch (err) {

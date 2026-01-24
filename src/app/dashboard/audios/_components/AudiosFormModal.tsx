@@ -71,22 +71,26 @@ export default function AudiosFormModal({
   };
 
   const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!title.trim()) return alert("Title is required");
-    if (!audioUrl) return alert("Audio file is required");
+    try {
+      e.preventDefault();
+      if (!title.trim()) return alert('Title is required');
+      if (!audioUrl) return alert('Audio file is required');
 
-    const payload: AudioDoc = {
-      title: title.trim(),
-      audioBy: audioBy.trim() || undefined,
-      uploader: uploader.trim() || undefined,
-      description: description.trim() || undefined,
-      tags: tags.length ? tags : undefined,
-      thumbnailUrl,
-      audioUrl,
-      lyrics: lyrics.length ? lyrics : undefined,
-    };
+      const payload: AudioDoc = {
+        title: title.trim(),
+        audioBy: audioBy.trim() || undefined,
+        uploader: uploader.trim() || undefined,
+        description: description.trim() || undefined,
+        tags: tags.length ? tags : undefined,
+        thumbnailUrl,
+        audioUrl,
+        lyrics: lyrics.length ? lyrics : undefined,
+      };
 
-    await onSubmit(payload);
+      await onSubmit(payload);
+    } catch (err) {
+      console.error('Failed to submit audio', err);
+    }
   };
 
   return (
