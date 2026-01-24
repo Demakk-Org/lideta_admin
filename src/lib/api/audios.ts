@@ -76,14 +76,10 @@ export async function createAudio(data: AudioDoc): Promise<string> {
       audioUrl: normString(data.audioUrl),
       uploadDate: serverTimestamp(),
       createdAt: serverTimestamp(),
+      tags: (data?.tags || []).filter(Boolean),
+      lyrics: (data?.lyrics || []).length ? normalizeLyrics(data.lyrics) : [],
     };
 
-    if (data?.tags && data.tags.filter(Boolean).length > 0) {
-      toWrite.tags = data.tags.filter(Boolean);
-    }
-    if (data?.lyrics && data.lyrics.length > 0) {
-      toWrite.lyrics = normalizeLyrics(data.lyrics);
-    }
     const added = await addDoc(colRef, toWrite);
     return added.id;
   } catch (err) {
