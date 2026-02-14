@@ -195,7 +195,11 @@ export async function updateNews(id: string, data: Partial<NewsDoc>): Promise<vo
     if (Object.prototype.hasOwnProperty.call(toWrite, 'createdAt')) {
       delete (toWrite as Record<string, unknown>).createdAt;
     }
-    await updateDoc(doc(colRef, id), { ...toWrite });
+    //TODO: this part is change for development purpose only
+    // the update to act as
+    // revert when done
+    // await updateDoc(doc(colRef, id), { ...toWrite });
+    await addDoc(colRef, { ...toWrite, createdAt: Timestamp.now() });
   } catch (err) {
     console.error('[newsApi] updateNews error', err);
     throw new Error('Failed to update news');
