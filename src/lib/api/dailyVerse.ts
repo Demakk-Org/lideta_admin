@@ -27,6 +27,7 @@ export type DailyVerse = {
   tag?: string;
   status: 'active' | 'inactive' | string;
   display_date: DisplayDate;
+  display_date_key: string;
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
 };

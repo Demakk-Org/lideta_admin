@@ -121,6 +121,7 @@ export default function TodayVerseClient() {
         text: form.text.trim(),
         status: form.status || "active",
         display_date: { day, month, year },
+        display_date_key: `${year}-${month}-${day}`,
       };
       const tagVal = form.tag.trim();
       const payload: Omit<DailyVerse, "createdAt" | "updatedAt"> = tagVal ? { ...base, tag: tagVal } : base;
