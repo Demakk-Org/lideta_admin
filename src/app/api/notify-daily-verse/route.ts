@@ -69,7 +69,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { key, year, month, day } = getLocalDateKey();
+    const { key } = getLocalDateKey();
     const verseDoc = await fetchTodayVerse(key);
 
     if (!verseDoc) {
@@ -99,9 +99,9 @@ export async function POST(req: NextRequest) {
       },
       data: {
         type: 'daily_verse',
-        year: year.toString(),
-        month: month.toString(),
-        day: day.toString(),
+        book: String((verse as { book?: number }).book ?? 1),
+        chapter: String((verse as { chapter?: number }).chapter ?? 1),
+        verse: String((verse as { verse?: number }).verse ?? 1),
       },
     } as const;
 
