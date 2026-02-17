@@ -1,0 +1,9 @@
+{
+  "crons": [
+    {
+      "path": "/api/notify-daily-verse",
+      "schedule": "30 17 * * *",
+      "timeZone": "Africa/Addis_Ababa"
+    }
+  ]
+}

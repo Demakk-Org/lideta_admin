@@ -7,6 +7,7 @@ import {
 } from "firebase-admin/app";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { getAuth } from "firebase-admin/auth";
+import { getMessaging } from "firebase-admin/messaging";
 import type { ServiceAccount } from "firebase-admin";
 import Logger from "../utils/logger";
 
@@ -70,4 +71,5 @@ if (!getApps().length) {
 
 export const adminDb = getFirestore();
 export const adminAuth = getAuth();
+export const adminMessaging = getMessaging();
 export { FieldValue };
