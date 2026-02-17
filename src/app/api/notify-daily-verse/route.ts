@@ -64,15 +64,32 @@ function validateCronRequest(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const requestId = crypto.randomUUID();
+  console.info('[notifyDailyVerse] Incoming request', {
+    requestId,
+    method: req.method,
+    headers: {
+      'x-cron-secret': req.headers.get('x-cron-secret') ? '[redacted]' : null,
+      'user-agent': req.headers.get('user-agent'),
+    },
+  });
+
   if (!validateCronRequest(req)) {
+    console.warn('[notifyDailyVerse] Unauthorized request', { requestId });
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   try {
     const { key } = getLocalDateKey();
+    console.info('[notifyDailyVerse] Derived date key', { requestId, key });
+
     const verseDoc = await fetchTodayVerse(key);
 
     if (!verseDoc) {
+      console.warn('[notifyDailyVerse] No active verse found', {
+        requestId,
+        key,
+      });
       return NextResponse.json(
         { ok: false, message: 'No daily verse found' },
         { status: 200 },
@@ -80,7 +97,15 @@ export async function POST(req: NextRequest) {
     }
 
     const tokens = await fetchPushTokens();
+    console.info('[notifyDailyVerse] Retrieved push tokens', {
+      requestId,
+      tokenCount: tokens.length,
+    });
+
     if (!tokens.length) {
+      console.warn('[notifyDailyVerse] No push tokens registered', {
+        requestId,
+      });
       return NextResponse.json(
         { ok: false, message: 'No push tokens registered' },
         { status: 200 },
@@ -107,15 +132,36 @@ export async function POST(req: NextRequest) {
 
     for (let i = 0; i < tokens.length; i += MAX_TOKENS_PER_BATCH) {
       const batch = tokens.slice(i, i + MAX_TOKENS_PER_BATCH);
-      await adminMessaging.sendEachForMulticast({
+      console.info('[notifyDailyVerse] Sending batch', {
+        requestId,
+        batchIndex: i / MAX_TOKENS_PER_BATCH,
+        batchSize: batch.length,
+      });
+
+      const response = await adminMessaging.sendEachForMulticast({
         ...message,
         tokens: batch,
       });
+
+      console.info('[notifyDailyVerse] Batch send result', {
+        requestId,
+        batchIndex: i / MAX_TOKENS_PER_BATCH,
+        successCount: response.successCount,
+        failureCount: response.failureCount,
+      });
     }
+
+    console.info('[notifyDailyVerse] Notification process completed', {
+      requestId,
+      totalTokens: tokens.length,
+    });
 
     return NextResponse.json({ ok: true, sent: tokens.length });
   } catch (error) {
-    console.error('[notifyDailyVerse] Failed to send notification', error);
+    console.error('[notifyDailyVerse] Failed to send notification', {
+      requestId,
+      error,
+    });
     return NextResponse.json(
       { error: 'Failed to send notification' },
       { status: 500 },
