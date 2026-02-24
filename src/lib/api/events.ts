@@ -26,6 +26,7 @@ export type EventDoc = {
   programme: string; // required programme field
   start_date_time?: string; // ISO or display string; we normalize timestamps to strings when reading
   end_date_time?: string;
+  registration_deadline?: string;
   imageUrl?: string;
   // Simple location fields
   location?: { primary: string; secondary?: string };
@@ -54,12 +55,12 @@ function normalizeTimestamp(val: unknown): string | undefined {
   return undefined;
 }
 
-function toTimestampString(val: unknown): string | undefined {
+function toTimestampValue(val: unknown): Timestamp | undefined {
   try {
     if (!val) return undefined;
-    if (val instanceof Timestamp) return val.toDate().toISOString();
+    if (val instanceof Timestamp) return val;
     if (val instanceof Date)
-      return isNaN(val.getTime()) ? undefined : val.toISOString();
+      return isNaN(val.getTime()) ? undefined : Timestamp.fromDate(val);
     if (
       typeof val === 'object' &&
       val !== null &&
@@ -70,13 +71,23 @@ function toTimestampString(val: unknown): string | undefined {
         (val as { seconds: number; nanoseconds: number }).seconds,
         (val as { seconds: number; nanoseconds: number }).nanoseconds,
       );
-      return t.toDate().toISOString();
+      return t;
     }
     if (typeof val === 'string') {
       const trimmed = val.trim();
       if (!trimmed) return undefined;
+      const localMatch = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.exec(trimmed);
+      if (localMatch) {
+        const yyyy = Number(trimmed.slice(0, 4));
+        const mm = Number(trimmed.slice(5, 7));
+        const dd = Number(trimmed.slice(8, 10));
+        const hh = Number(trimmed.slice(11, 13));
+        const mi = Number(trimmed.slice(14, 16));
+        const local = new Date(yyyy, mm - 1, dd, hh, mi, 0, 0);
+        return isNaN(local.getTime()) ? undefined : Timestamp.fromDate(local);
+      }
       const asDate = new Date(trimmed);
-      return isNaN(asDate.getTime()) ? trimmed : asDate.toISOString();
+      return isNaN(asDate.getTime()) ? undefined : Timestamp.fromDate(asDate);
     }
   } catch {}
   return undefined;
@@ -160,12 +171,20 @@ export async function listEvents(): Promise<WithId<EventDoc>[]> {
       const data = d.data() as Record<string, unknown>;
       const startRaw = data['start_date_time'];
       const endRaw = data['end_date_time'];
+      const deadlineRaw = data['registration_deadline'];
       const descRaw = data['description'];
       const locRaw = data['location'];
       const normalized: EventDoc = {
         ...(data as unknown as EventDoc),
-        start_date_time: normalizeTimestamp(startRaw) ?? (typeof startRaw === 'string' ? startRaw : undefined),
-        end_date_time: normalizeTimestamp(endRaw) ?? (typeof endRaw === 'string' ? endRaw : undefined),
+        start_date_time:
+          normalizeTimestamp(startRaw) ??
+          (typeof startRaw === 'string' ? startRaw : undefined),
+        end_date_time:
+          normalizeTimestamp(endRaw) ??
+          (typeof endRaw === 'string' ? endRaw : undefined),
+        registration_deadline:
+          normalizeTimestamp(deadlineRaw) ??
+          (typeof deadlineRaw === 'string' ? deadlineRaw : undefined),
         description: normalizeDescription(descRaw),
         // Map legacy location shapes to { primary, secondary? }
         location: (() => {
@@ -197,10 +216,18 @@ export async function listEvents(): Promise<WithId<EventDoc>[]> {
 function sanitizeEventForWrite(data: Partial<EventDoc>): Partial<EventDoc> {
   const result: Partial<EventDoc> = { ...data };
   if (Object.prototype.hasOwnProperty.call(result, 'start_date_time')) {
-    result.start_date_time = toTimestampString(result.start_date_time);
+    (result as Record<string, unknown>).start_date_time = toTimestampValue(
+      result.start_date_time,
+    );
   }
   if (Object.prototype.hasOwnProperty.call(result, 'end_date_time')) {
-    result.end_date_time = toTimestampString(result.end_date_time);
+    (result as Record<string, unknown>).end_date_time = toTimestampValue(
+      result.end_date_time,
+    );
+  }
+  if (Object.prototype.hasOwnProperty.call(result, 'registration_deadline')) {
+    (result as Record<string, unknown>).registration_deadline =
+      toTimestampValue(result.registration_deadline);
   }
   if (result.description) {
     result.description = normalizeDescription(result.description) ?? undefined;
