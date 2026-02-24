@@ -54,6 +54,34 @@ function normalizeTimestamp(val: unknown): string | undefined {
   return undefined;
 }
 
+function toTimestampString(val: unknown): string | undefined {
+  try {
+    if (!val) return undefined;
+    if (val instanceof Timestamp) return val.toDate().toISOString();
+    if (val instanceof Date)
+      return isNaN(val.getTime()) ? undefined : val.toISOString();
+    if (
+      typeof val === 'object' &&
+      val !== null &&
+      'seconds' in val &&
+      'nanoseconds' in val
+    ) {
+      const t = new Timestamp(
+        (val as { seconds: number; nanoseconds: number }).seconds,
+        (val as { seconds: number; nanoseconds: number }).nanoseconds,
+      );
+      return t.toDate().toISOString();
+    }
+    if (typeof val === 'string') {
+      const trimmed = val.trim();
+      if (!trimmed) return undefined;
+      const asDate = new Date(trimmed);
+      return isNaN(asDate.getTime()) ? trimmed : asDate.toISOString();
+    }
+  } catch {}
+  return undefined;
+}
+
 function toArrayOfStrings(input: unknown): string[] {
   if (Array.isArray(input)) return input.map((v) => String(v));
   if (typeof input === 'string') return input.split(/\r?\n|,/).map((v) => v.trim()).filter(Boolean);
@@ -168,6 +196,12 @@ export async function listEvents(): Promise<WithId<EventDoc>[]> {
 
 function sanitizeEventForWrite(data: Partial<EventDoc>): Partial<EventDoc> {
   const result: Partial<EventDoc> = { ...data };
+  if (Object.prototype.hasOwnProperty.call(result, 'start_date_time')) {
+    result.start_date_time = toTimestampString(result.start_date_time);
+  }
+  if (Object.prototype.hasOwnProperty.call(result, 'end_date_time')) {
+    result.end_date_time = toTimestampString(result.end_date_time);
+  }
   if (result.description) {
     result.description = normalizeDescription(result.description) ?? undefined;
   }
