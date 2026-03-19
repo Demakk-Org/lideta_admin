@@ -39,7 +39,7 @@ const colRef = collection(db, 'daily_verse');
 export async function listDailyVerses(): Promise<WithId<DailyVerse>[]> {
   console.log('[dailyVerseApi] listDailyVerses: querying daily_verse...');
   try {
-    const q = query(colRef, orderBy('createdAt', 'desc'));
+    const q = query(colRef, orderBy('updatedAt', 'desc'));
     const snap = await getDocs(q);
     console.log('[dailyVerseApi] listDailyVerses: fetched', snap.size, 'docs');
     const items = snap.docs.map((d) => ({ id: d.id, ...(d.data() as DailyVerse) }));
