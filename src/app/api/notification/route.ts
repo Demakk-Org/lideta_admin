@@ -29,6 +29,24 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid payload' }, { status: 400 });
     }
 
+    const joinRequestRef = adminDb
+      .collection('bible_study_groups')
+      .doc(body.groupId)
+      .collection('join_requests')
+      .doc(body.requesterId);
+
+    await joinRequestRef.set(
+      {
+        groupId: body.groupId,
+        requesterId: body.requesterId,
+        requesterName: body.requesterName,
+        status: 'pending',
+        createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    );
+
     const leaderNotificationsRef = adminDb
       .collection('users')
       .doc(body.leaderUserId)
