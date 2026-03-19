@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
       createdAt: FieldValue.serverTimestamp(),
       isRead: false,
       imageUrl: null,
-      deepLink: `group:${body.groupId}|status:pending`,
+      deepLink: `group:${body.groupId}|requester:${body.requesterId}`,
       type: 'join_request',
       scope: 'personal',
       status: 'pending',
