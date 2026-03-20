@@ -144,20 +144,17 @@ export async function PATCH(
           finalStatus === 'approved'
             ? `Your request to join ${groupName} was approved.`
             : `Your request to join ${groupName} was rejected.`,
-        createdAt: FieldValue.serverTimestamp(),
-        updatedAt: FieldValue.serverTimestamp(),
         isRead: false,
         imageUrl: null,
         deepLink: buildDeepLink(body.groupId, requesterId, finalStatus),
         type: 'join_request',
         scope: 'personal',
-        status: finalStatus,
         groupId: body.groupId,
         groupName,
         leaderUserId: body.leaderUserId,
         requesterId,
         requesterName,
-        joinRequestId: requesterId,
+        createdAt: FieldValue.serverTimestamp(),
       });
     });
 
