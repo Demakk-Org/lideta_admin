@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, FieldValue } from '@/lib/firebase/admin';
+import Logger from '@/lib/utils/logger';
 
 type ResolveJoinRequestPayload = {
   groupId: string;
@@ -34,11 +35,22 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const routeName = '[joinRequestApi] PATCH';
   try {
     const { id: leaderNotificationId } = await params;
     const body = (await req.json()) as Partial<ResolveJoinRequestPayload>;
 
+    Logger.info(routeName, 'Incoming resolve join request', {
+      leaderNotificationId,
+      groupId: body.groupId,
+      leaderUserId: body.leaderUserId,
+      status: body.status,
+    });
+
     if (!leaderNotificationId || typeof leaderNotificationId !== 'string') {
+      Logger.error(routeName, 'Invalid notification id', {
+        leaderNotificationId,
+      });
       return NextResponse.json(
         { error: 'Invalid notification id' },
         { status: 400 },
@@ -46,6 +58,11 @@ export async function PATCH(
     }
 
     if (!isValidPayload(body)) {
+      Logger.error(routeName, 'Invalid payload', {
+        hasGroupId: typeof body.groupId === 'string',
+        hasLeaderUserId: typeof body.leaderUserId === 'string',
+        status: body.status,
+      });
       return NextResponse.json({ error: 'Invalid payload' }, { status: 400 });
     }
 
@@ -58,6 +75,11 @@ export async function PATCH(
       const leaderNotificationRef =
         leaderNotificationsRef.doc(leaderNotificationId);
       const leaderNotificationSnap = await tx.get(leaderNotificationRef);
+
+      Logger.info(routeName, 'Fetched leader notification', {
+        leaderNotificationId,
+        exists: leaderNotificationSnap.exists,
+      });
 
       if (!leaderNotificationSnap.exists) {
         throw new Error('LEADER_NOTIFICATION_NOT_FOUND');
@@ -73,6 +95,10 @@ export async function PATCH(
         throw new Error('REQUESTER_NOT_FOUND_ON_NOTIFICATION');
       }
 
+      Logger.info(routeName, 'Resolved requester from leader notification', {
+        requesterId,
+      });
+
       if (leaderNotificationData.groupId !== body.groupId) {
         throw new Error('GROUP_MISMATCH');
       }
@@ -84,6 +110,12 @@ export async function PATCH(
         .doc(requesterId);
 
       const joinRequestSnap = await tx.get(joinRequestRef);
+
+      Logger.info(routeName, 'Fetched join request', {
+        requesterId,
+        groupId: body.groupId,
+        exists: joinRequestSnap.exists,
+      });
 
       if (!joinRequestSnap.exists) {
         throw new Error('JOIN_REQUEST_NOT_FOUND');
@@ -108,6 +140,11 @@ export async function PATCH(
         .doc(requesterId)
         .collection('notifications');
       const requesterNotificationRef = requesterNotificationsRef.doc();
+
+      Logger.info(routeName, 'Prepared transaction updates', {
+        requesterId,
+        finalStatus,
+      });
 
       tx.set(
         joinRequestRef,
@@ -156,6 +193,18 @@ export async function PATCH(
         requesterName,
         createdAt: FieldValue.serverTimestamp(),
       });
+
+      Logger.info(routeName, 'Queued notification updates in transaction', {
+        leaderNotificationId,
+        requesterId,
+        finalStatus,
+      });
+    });
+
+    Logger.info(routeName, 'Join request resolved successfully', {
+      leaderNotificationId,
+      groupId: body.groupId,
+      status: body.status,
     });
 
     return NextResponse.json({ ok: true });
@@ -164,6 +213,9 @@ export async function PATCH(
       error instanceof Error &&
       error.message === 'LEADER_NOTIFICATION_NOT_FOUND'
     ) {
+      Logger.error(routeName, 'Leader notification not found', {
+        error: error.message,
+      });
       return NextResponse.json(
         { error: 'Leader notification not found' },
         { status: 404 },
@@ -174,6 +226,9 @@ export async function PATCH(
       error instanceof Error &&
       error.message === 'REQUESTER_NOT_FOUND_ON_NOTIFICATION'
     ) {
+      Logger.error(routeName, 'Requester missing on leader notification', {
+        error: error.message,
+      });
       return NextResponse.json(
         { error: 'Requester is missing on leader notification' },
         { status: 400 },
@@ -181,6 +236,9 @@ export async function PATCH(
     }
 
     if (error instanceof Error && error.message === 'GROUP_MISMATCH') {
+      Logger.error(routeName, 'Notification group mismatch', {
+        error: error.message,
+      });
       return NextResponse.json(
         { error: 'Notification group does not match payload group' },
         { status: 400 },
@@ -188,6 +246,9 @@ export async function PATCH(
     }
 
     if (error instanceof Error && error.message === 'JOIN_REQUEST_NOT_FOUND') {
+      Logger.error(routeName, 'Join request not found', {
+        error: error.message,
+      });
       return NextResponse.json(
         { error: 'Join request not found' },
         { status: 404 },
@@ -198,13 +259,18 @@ export async function PATCH(
       error instanceof Error &&
       error.message === 'JOIN_REQUEST_ALREADY_RESOLVED'
     ) {
+      Logger.error(routeName, 'Join request already resolved', {
+        error: error.message,
+      });
       return NextResponse.json(
         { error: 'Join request has already been resolved' },
         { status: 409 },
       );
     }
 
-    console.error('[joinRequestApi] Failed to resolve join request', error);
+    Logger.error(routeName, 'Failed to resolve join request', {
+      error: error instanceof Error ? error.message : 'unknown',
+    });
     return NextResponse.json(
       { error: 'Failed to resolve join request' },
       { status: 500 },
