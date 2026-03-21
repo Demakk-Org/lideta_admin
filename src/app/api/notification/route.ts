@@ -61,15 +61,10 @@ export async function POST(req: NextRequest) {
       createdAt: FieldValue.serverTimestamp(),
       isRead: false,
       imageUrl: null,
-      deepLink: `group:${body.groupId}|requester:${body.requesterId}`,
+      deepLink: `group:${body.groupId}|requester:${body.requesterId}|leaader:${body.leaderUserId}`,
       type: 'join_request',
       scope: 'personal',
       status: 'pending',
-      groupId: body.groupId,
-      groupName: body.groupName,
-      leaderUserId: body.leaderUserId,
-      requesterId: body.requesterId,
-      requesterName: body.requesterName,
     });
 
     return NextResponse.json({ ok: true });
