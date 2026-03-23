@@ -27,8 +27,23 @@ function isValidPayload(
   return hasRequiredStrings && isValidStatus;
 }
 
-function buildDeepLink(groupId: string, requesterId: string, status: string) {
-  return `group:${groupId}|requester:${requesterId}|status:${status}`;
+function buildDeepLink(
+  groupId: string,
+  requesterId: string,
+  status: string,
+  leaderId: string,
+) {
+  return `group:${groupId}|requester:${requesterId}|leader:${leaderId}|status:${status}`;
+}
+
+function getDeepLinkValues(deepLink: string) {
+  const [groupId, requesterId, leaderId, status] = deepLink.split('|');
+  return {
+    groupId: groupId.replace('group:', ''),
+    requesterId: requesterId.replace('requester:', ''),
+    status: status.replace('status:', ''),
+    leaderId: leaderId.replace('leader:', ''),
+  };
 }
 
 export async function PATCH(
@@ -85,10 +100,9 @@ export async function PATCH(
         throw new Error('LEADER_NOTIFICATION_NOT_FOUND');
       }
 
-      const leaderNotificationData = leaderNotificationSnap.data() as {
-        requesterId?: string;
-        groupId?: string;
-      };
+      const leaderNotificationData = getDeepLinkValues(
+        leaderNotificationSnap.data()?.deepLink || '',
+      );
 
       const requesterId = leaderNotificationData.requesterId;
       if (!requesterId || typeof requesterId !== 'string') {
@@ -166,7 +180,12 @@ export async function PATCH(
             finalStatus === 'approved'
               ? `${requesterName} has been approved to join ${groupName}.`
               : `${requesterName} has been rejected from joining ${groupName}.`,
-          deepLink: buildDeepLink(body.groupId, requesterId, finalStatus),
+          deepLink: buildDeepLink(
+            body.groupId,
+            requesterId,
+            finalStatus,
+            body.leaderUserId,
+          ),
           updatedAt: FieldValue.serverTimestamp(),
         },
         { merge: true },
@@ -183,14 +202,14 @@ export async function PATCH(
             : `Your request to join ${groupName} was rejected.`,
         isRead: false,
         imageUrl: null,
-        deepLink: buildDeepLink(body.groupId, requesterId, finalStatus),
+        deepLink: buildDeepLink(
+          body.groupId,
+          requesterId,
+          finalStatus,
+          body.leaderUserId,
+        ),
         type: 'join_request',
         scope: 'personal',
-        groupId: body.groupId,
-        groupName,
-        leaderUserId: body.leaderUserId,
-        requesterId,
-        requesterName,
         createdAt: FieldValue.serverTimestamp(),
       });
 
