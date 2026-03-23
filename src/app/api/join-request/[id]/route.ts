@@ -41,7 +41,7 @@ function getDeepLinkValues(deepLink: string) {
   return {
     groupId: groupId.replace('group:', ''),
     requesterId: requesterId.replace('requester:', ''),
-    status: status.replace('status:', ''),
+    status: status?.replace('status:', ''),
     leaderId: leaderId.replace('leader:', ''),
   };
 }
