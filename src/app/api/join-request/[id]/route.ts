@@ -160,6 +160,7 @@ export async function PATCH(
         finalStatus,
       });
 
+      // update the join request in the group
       tx.set(
         joinRequestRef,
         {
@@ -172,6 +173,7 @@ export async function PATCH(
         { merge: true },
       );
 
+      // update the notification of the leader with it's response
       tx.set(
         leaderNotificationRef,
         {
@@ -191,6 +193,22 @@ export async function PATCH(
         { merge: true },
       );
 
+      // add requester to group members if approved
+      if (finalStatus === 'approved') {
+        const groupRef = adminDb
+          .collection('bible_study_groups')
+          .doc(body.groupId);
+        tx.update(groupRef, {
+          members: FieldValue.arrayUnion(requesterId),
+          updatedAt: FieldValue.serverTimestamp(),
+        });
+        Logger.info(routeName, 'Adding member to group', {
+          groupId: body.groupId,
+          requesterId,
+        });
+      }
+
+      // send a response notification to the requester
       tx.set(requesterNotificationRef, {
         title:
           finalStatus === 'approved'
