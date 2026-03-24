@@ -86,6 +86,8 @@ export async function PATCH(
       .doc(body.leaderUserId)
       .collection('notifications');
 
+    let updatedLeaderNotification: Record<string, unknown> | null = null;
+
     await adminDb.runTransaction(async (tx) => {
       const leaderNotificationRef =
         leaderNotificationsRef.doc(leaderNotificationId);
@@ -174,24 +176,36 @@ export async function PATCH(
       );
 
       // update the notification of the leader with it's response
+
+      let updatedBodyText =
+        finalStatus === 'approved'
+          ? `${requesterName} has been approved to join ${groupName}.`
+          : `${requesterName} has been rejected from joining ${groupName}.`;
+      let updatedDeepLink = buildDeepLink(
+        body.groupId,
+        requesterId,
+        finalStatus,
+        body.leaderUserId,
+      );
       tx.set(
         leaderNotificationRef,
         {
           status: finalStatus,
-          body:
-            finalStatus === 'approved'
-              ? `${requesterName} has been approved to join ${groupName}.`
-              : `${requesterName} has been rejected from joining ${groupName}.`,
-          deepLink: buildDeepLink(
-            body.groupId,
-            requesterId,
-            finalStatus,
-            body.leaderUserId,
-          ),
+          body: updatedBodyText,
+          deepLink: updatedDeepLink,
           updatedAt: FieldValue.serverTimestamp(),
         },
         { merge: true },
       );
+
+      updatedLeaderNotification = {
+        id: leaderNotificationRef.id,
+        ...(leaderNotificationSnap.data() ?? {}),
+        status: finalStatus,
+        body: updatedBodyText,
+        deepLink: updatedDeepLink,
+        updatedAt: new Date().toISOString(),
+      };
 
       // add requester to group members if approved
       if (finalStatus === 'approved') {
@@ -244,7 +258,15 @@ export async function PATCH(
       status: body.status,
     });
 
-    return NextResponse.json({ ok: true });
+    Logger.info(routeName, 'Returning updated leader notification', {
+      leaderNotificationId,
+      hasPayload: Boolean(updatedLeaderNotification),
+    });
+
+    return NextResponse.json({
+      ok: true,
+      notification: updatedLeaderNotification,
+    });
   } catch (error) {
     if (
       error instanceof Error &&
