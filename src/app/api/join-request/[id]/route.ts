@@ -190,9 +190,9 @@ export async function PATCH(
       tx.set(
         leaderNotificationRef,
         {
-          status: finalStatus,
           body: updatedBodyText,
           deepLink: updatedDeepLink,
+          isRead: true,
           updatedAt: FieldValue.serverTimestamp(),
         },
         { merge: true },
@@ -201,7 +201,6 @@ export async function PATCH(
       updatedLeaderNotification = {
         id: leaderNotificationRef.id,
         ...(leaderNotificationSnap.data() ?? {}),
-        status: finalStatus,
         body: updatedBodyText,
         deepLink: updatedDeepLink,
         isRead: true,
