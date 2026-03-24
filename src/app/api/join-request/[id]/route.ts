@@ -204,6 +204,7 @@ export async function PATCH(
         status: finalStatus,
         body: updatedBodyText,
         deepLink: updatedDeepLink,
+        isRead: true,
         updatedAt: new Date().toISOString(),
       };
 
