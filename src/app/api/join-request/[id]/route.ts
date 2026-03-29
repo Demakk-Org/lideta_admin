@@ -204,6 +204,10 @@ export async function PATCH(
         body: updatedBodyText,
         deepLink: updatedDeepLink,
         isRead: true,
+        createdAt: leaderNotificationSnap
+          .data()!
+          .createdAt.toDate()
+          .toISOString(),
         updatedAt: new Date().toISOString(),
       };
 
