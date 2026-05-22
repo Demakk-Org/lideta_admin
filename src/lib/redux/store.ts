@@ -13,6 +13,8 @@ import audiosReducer from './features/audiosSlice';
 import groupsReducer from './features/groupsSlice';
 import usersReducer from './features/usersSlice';
 import todayParagraphsReducer from './features/todayParagraphsSlice';
+import quizzesReducer from './features/quizzesSlice';
+import quizCategoriesReducer from './features/quizCategoriesSlice';
 
 // Import your reducers here
 // import someReducer from './features/someFeature/someSlice';
@@ -42,6 +44,8 @@ export const store = configureStore({
     groups: groupsReducer,
     users: usersReducer,
     todayParagraphs: todayParagraphsReducer,
+    quizzes: quizzesReducer,
+    quizCategories: quizCategoriesReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({

@@ -10,6 +10,7 @@ import {
   CalendarDaysIcon,
   SpeakerWaveIcon,
   DocumentTextIcon,
+  QuestionMarkCircleIcon,
 } from '@heroicons/react/24/outline';
 import toast from 'react-hot-toast';
 import { signOutUser } from '@/lib/api/auth';
@@ -25,6 +26,8 @@ const navigation = [
   { name: 'News', href: '/dashboard/news', icon: NewspaperIcon },
   { name: 'Events', href: '/dashboard/events', icon: CalendarDaysIcon },
   { name: 'Event Categories', href: '/dashboard/event-categories', icon: CalendarDaysIcon },
+  { name: 'Quizzes', href: '/dashboard/quizzes', icon: QuestionMarkCircleIcon },
+  { name: 'Quiz Categories', href: '/dashboard/quiz-categories', icon: QuestionMarkCircleIcon },
   { name: 'Audios', href: '/dashboard/audios', icon: SpeakerWaveIcon },
   { name: 'Groups', href: '/dashboard/groups', icon: UserGroupIcon },
   { name: 'Users', href: '/dashboard/users', icon: UsersIcon },
