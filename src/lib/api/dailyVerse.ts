@@ -51,10 +51,13 @@ const colRef = collection(db, 'daily_verse');
 export async function listDailyVerses(): Promise<WithId<DailyVerse>[]> {
   console.log('[dailyVerseApi] listDailyVerses: querying daily_verse...');
   try {
-    const q = query(colRef, orderBy('updatedAt', 'desc'));
+    const q = query(colRef, orderBy('createdAt', 'desc'));
     const snap = await getDocs(q);
     console.log('[dailyVerseApi] listDailyVerses: fetched', snap.size, 'docs');
-    const items = snap.docs.map((d) => ({ id: d.id, ...(d.data() as DailyVerse) }));
+    const items = snap.docs.map((d) => ({
+      id: d.id,
+      ...(d.data() as DailyVerse),
+    }));
     if (items[0]) {
       console.log('[dailyVerseApi] listDailyVerses: first item', items[0]);
     }
@@ -66,7 +69,7 @@ export async function listDailyVerses(): Promise<WithId<DailyVerse>[]> {
 }
 
 export async function addDailyVerse(
-  data: Omit<DailyVerse, 'createdAt' | 'updatedAt'>
+  data: Omit<DailyVerse, 'createdAt' | 'updatedAt'>,
 ): Promise<string> {
   console.log('[dailyVerseApi] addDailyVerse payload', data);
   try {
@@ -84,7 +87,7 @@ export async function addDailyVerse(
 
 export async function updateDailyVerse(
   id: string,
-  data: Partial<DailyVerse>
+  data: Partial<DailyVerse>,
 ): Promise<void> {
   console.log('[dailyVerseApi] updateDailyVerse id', id, 'data', data);
   try {
