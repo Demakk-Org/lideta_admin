@@ -30,6 +30,13 @@ const emptyForm: VerseForm = {
   day: "",
   month: "",
   year: "",
+  sectionEnabled: false,
+  sectionFromBook: "",
+  sectionFromChapter: "",
+  sectionFromVerse: "",
+  sectionToBook: "",
+  sectionToChapter: "",
+  sectionToVerse: "",
 };
 
 export default function TodayVerseClient() {
@@ -113,6 +120,22 @@ export default function TodayVerseClient() {
       const day = gd;
       const month = gm;
       const year = gy;
+      let section: DailyVerse["section"] = null;
+      if (form.sectionEnabled) {
+        const fb = Number(form.sectionFromBook);
+        const fc = Number(form.sectionFromChapter);
+        const fv = Number(form.sectionFromVerse);
+        const tb = Number(form.sectionToBook);
+        const tc = Number(form.sectionToChapter);
+        const tv = Number(form.sectionToVerse);
+        if ([fb, fc, fv, tb, tc, tv].some(Number.isNaN)) {
+          throw new Error("Section: book, chapter, and verse are required for both From and To");
+        }
+        section = {
+          from: { book: fb, chapter: fc, verse: fv },
+          to: { book: tb, chapter: tc, verse: tv },
+        };
+      }
       const base: Omit<DailyVerse, "createdAt" | "updatedAt"> = {
         book,
         chapter,
@@ -122,6 +145,7 @@ export default function TodayVerseClient() {
         status: form.status || "active",
         display_date: { day, month, year },
         display_date_key: `${year}-${month}-${day}`,
+        section,
       };
       const tagVal = form.tag.trim();
       const payload: Omit<DailyVerse, "createdAt" | "updatedAt"> = tagVal ? { ...base, tag: tagVal } : base;
@@ -160,6 +184,7 @@ export default function TodayVerseClient() {
       em = String(conv[1]);
       ed = String(conv[2]);
     } catch {}
+    const sec = v.section ?? null;
     setForm({
       book: String(v.book ?? ""),
       chapter: String(v.chapter ?? ""),
@@ -171,6 +196,13 @@ export default function TodayVerseClient() {
       day: ed,
       month: em,
       year: ey,
+      sectionEnabled: !!sec,
+      sectionFromBook: sec ? String(sec.from.book) : "",
+      sectionFromChapter: sec ? String(sec.from.chapter) : "",
+      sectionFromVerse: sec ? String(sec.from.verse) : "",
+      sectionToBook: sec ? String(sec.to.book) : "",
+      sectionToChapter: sec ? String(sec.to.chapter) : "",
+      sectionToVerse: sec ? String(sec.to.verse) : "",
     });
     setIsModalOpen(true);
   };

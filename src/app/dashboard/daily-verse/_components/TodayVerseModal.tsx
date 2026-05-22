@@ -159,6 +159,8 @@ export default function TodayVerseModal({ isOpen, form, setForm, submitting, sub
           </div>
         </div>
 
+        <ReferencePreview form={form} books={books} />
+
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
             <label className="block text-sm font-medium text-primary-800">EC Day</label>
@@ -242,7 +244,254 @@ export default function TodayVerseModal({ isOpen, form, setForm, submitting, sub
             </select>
           </div>
         </div>
+
+        <SectionRangeBlock
+          form={form}
+          setForm={setForm}
+          books={books}
+          verseCounts={verseCounts}
+        />
       </form>
     </AppModal>
+  );
+}
+
+function ReferencePreview({
+  form,
+  books,
+}: {
+  form: VerseForm;
+  books: { index: number; name: string }[];
+}) {
+  const bookNum = Number(form.book);
+  const chapNum = Number(form.chapter);
+  const verseNum = Number(form.verse);
+  const bookName = books.find((b) => b.index === bookNum)?.name ?? "";
+  const ready =
+    bookName && !Number.isNaN(chapNum) && chapNum > 0 && !Number.isNaN(verseNum) && verseNum > 0;
+  return (
+    <p className="text-xs text-primary-600">
+      <span className="mr-1 font-medium text-primary-700">Reference preview:</span>
+      {ready ? (
+        <span className="text-primary-900">{`${bookName} ${chapNum}:${verseNum}`}</span>
+      ) : (
+        <span className="italic">choose book, chapter, verse</span>
+      )}
+    </p>
+  );
+}
+
+function SectionRangeBlock({
+  form,
+  setForm,
+  books,
+  verseCounts,
+}: {
+  form: VerseForm;
+  setForm: React.Dispatch<React.SetStateAction<VerseForm>>;
+  books: { index: number; name: string }[];
+  verseCounts: Record<number, number[]>;
+}) {
+  // Track which "to-*" fields the user has explicitly touched.
+  // While untouched, they mirror the corresponding "from-*" value.
+  const [toTouched, setToTouched] = useState<{ book: boolean; chapter: boolean }>({
+    book: false,
+    chapter: false,
+  });
+
+  const fromChapterMax = useMemo(
+    () => getChapterCount(Number(form.sectionFromBook) || 0),
+    [form.sectionFromBook],
+  );
+  const toChapterMax = useMemo(
+    () => getChapterCount(Number(form.sectionToBook) || 0),
+    [form.sectionToBook],
+  );
+  const fromVerseMax = useMemo(() => {
+    const b = Number(form.sectionFromBook);
+    const c = Number(form.sectionFromChapter);
+    if (Number.isNaN(b) || Number.isNaN(c)) return 0;
+    return verseCounts[b]?.[c - 1] ?? 0;
+  }, [form.sectionFromBook, form.sectionFromChapter, verseCounts]);
+  const toVerseMax = useMemo(() => {
+    const b = Number(form.sectionToBook);
+    const c = Number(form.sectionToChapter);
+    if (Number.isNaN(b) || Number.isNaN(c)) return 0;
+    return verseCounts[b]?.[c - 1] ?? 0;
+  }, [form.sectionToBook, form.sectionToChapter, verseCounts]);
+
+  // Auto-mirror to-book / to-chapter from the from-* fields until manually edited.
+  useEffect(() => {
+    if (!form.sectionEnabled) return;
+    setForm((s) => {
+      const next = { ...s };
+      if (!toTouched.book) next.sectionToBook = s.sectionFromBook;
+      if (!toTouched.chapter) next.sectionToChapter = s.sectionFromChapter;
+      return next;
+    });
+  }, [
+    form.sectionEnabled,
+    form.sectionFromBook,
+    form.sectionFromChapter,
+    toTouched.book,
+    toTouched.chapter,
+    setForm,
+  ]);
+
+  const toggleSection = (enabled: boolean) => {
+    if (!enabled) {
+      setToTouched({ book: false, chapter: false });
+      setForm((s) => ({
+        ...s,
+        sectionEnabled: false,
+        sectionFromBook: "",
+        sectionFromChapter: "",
+        sectionFromVerse: "",
+        sectionToBook: "",
+        sectionToChapter: "",
+        sectionToVerse: "",
+      }));
+    } else {
+      setForm((s) => ({ ...s, sectionEnabled: true }));
+    }
+  };
+
+  return (
+    <div className="rounded-md border border-primary-200 p-3">
+      <label className="flex items-center gap-2 text-sm font-medium text-primary-800">
+        <input
+          type="checkbox"
+          checked={form.sectionEnabled}
+          onChange={(e) => toggleSection(e.target.checked)}
+        />
+        Verse range / section (optional)
+      </label>
+      {form.sectionEnabled && (
+        <div className="mt-3 space-y-3">
+          <div>
+            <p className="mb-1 text-xs font-semibold text-primary-700">From</p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <select
+                value={form.sectionFromBook}
+                onChange={(e) =>
+                  setForm((s) => ({
+                    ...s,
+                    sectionFromBook: e.target.value,
+                    sectionFromChapter: "",
+                    sectionFromVerse: "",
+                  }))
+                }
+                className="rounded-md border border-primary-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              >
+                <option value="">Book</option>
+                {books.map((b) => (
+                  <option key={b.index} value={String(b.index)}>
+                    {b.name}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={form.sectionFromChapter}
+                onChange={(e) =>
+                  setForm((s) => ({
+                    ...s,
+                    sectionFromChapter: e.target.value,
+                    sectionFromVerse: "",
+                  }))
+                }
+                disabled={fromChapterMax === 0}
+                className="rounded-md border border-primary-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              >
+                <option value="">Chapter</option>
+                {Array.from({ length: fromChapterMax }, (_, i) => String(i + 1)).map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={form.sectionFromVerse}
+                onChange={(e) =>
+                  setForm((s) => ({ ...s, sectionFromVerse: e.target.value }))
+                }
+                disabled={fromVerseMax === 0}
+                className="rounded-md border border-primary-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              >
+                <option value="">Verse</option>
+                {Array.from({ length: fromVerseMax }, (_, i) => String(i + 1)).map((v) => (
+                  <option key={v} value={v}>
+                    {v}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <p className="mb-1 text-xs font-semibold text-primary-700">To</p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <select
+                value={form.sectionToBook}
+                onChange={(e) => {
+                  setToTouched((t) => ({ ...t, book: true }));
+                  setForm((s) => ({
+                    ...s,
+                    sectionToBook: e.target.value,
+                    sectionToChapter: "",
+                    sectionToVerse: "",
+                  }));
+                }}
+                className="rounded-md border border-primary-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              >
+                <option value="">Book</option>
+                {books.map((b) => (
+                  <option key={b.index} value={String(b.index)}>
+                    {b.name}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={form.sectionToChapter}
+                onChange={(e) => {
+                  setToTouched((t) => ({ ...t, chapter: true }));
+                  setForm((s) => ({
+                    ...s,
+                    sectionToChapter: e.target.value,
+                    sectionToVerse: "",
+                  }));
+                }}
+                disabled={toChapterMax === 0}
+                className="rounded-md border border-primary-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              >
+                <option value="">Chapter</option>
+                {Array.from({ length: toChapterMax }, (_, i) => String(i + 1)).map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={form.sectionToVerse}
+                onChange={(e) =>
+                  setForm((s) => ({ ...s, sectionToVerse: e.target.value }))
+                }
+                disabled={toVerseMax === 0}
+                className="rounded-md border border-primary-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              >
+                <option value="">Verse</option>
+                {Array.from({ length: toVerseMax }, (_, i) => String(i + 1)).map((v) => (
+                  <option key={v} value={v}>
+                    {v}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <p className="mt-1 text-xs text-primary-600">
+              Book and chapter auto-fill from the &ldquo;From&rdquo; row until you change them.
+            </p>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

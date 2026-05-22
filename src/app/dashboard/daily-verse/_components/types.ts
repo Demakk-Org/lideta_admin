@@ -9,4 +9,13 @@ export type VerseForm = {
   day: string;
   month: string; // EC month 1-13
   year: string;
+
+  // Optional verse range (DailyVerseSection). All blank when disabled.
+  sectionEnabled: boolean;
+  sectionFromBook: string;
+  sectionFromChapter: string;
+  sectionFromVerse: string;
+  sectionToBook: string;
+  sectionToChapter: string;
+  sectionToVerse: string;
 };

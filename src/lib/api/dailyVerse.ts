@@ -18,6 +18,17 @@ export type DisplayDate = {
   year: number;
 };
 
+export type VerseCoord = {
+  book: number;
+  chapter: number;
+  verse: number;
+};
+
+export type DailyVerseSection = {
+  from: VerseCoord;
+  to: VerseCoord;
+};
+
 export type DailyVerse = {
   book: number; // book index or id as in your dataset
   chapter: number;
@@ -28,6 +39,7 @@ export type DailyVerse = {
   status: 'active' | 'inactive' | string;
   display_date: DisplayDate;
   display_date_key: string;
+  section?: DailyVerseSection | null;
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
 };
