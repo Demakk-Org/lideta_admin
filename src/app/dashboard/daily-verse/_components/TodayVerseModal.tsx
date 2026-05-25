@@ -5,6 +5,7 @@ import AppButton, { AppButtonVariant } from "@/components/ui/AppButton";
 import AppModal from "@/components/ui/AppModal";
 import { useEffect, useMemo, useState } from "react";
 import type { VerseForm } from "./types";
+import { getVerseText } from "@/lib/api/bibleText";
 
 type Props = {
   isOpen: boolean;
@@ -80,6 +81,33 @@ export default function TodayVerseModal({ isOpen, form, setForm, submitting, sub
       setForm((s) => ({ ...s, verse: String(verseMax) }));
     }
   }, [verseMax, form.verse, setForm]);
+
+  // Auto-fill verse text from the Amharic bible when book/chapter/verse change.
+  // If the lookup misses, clear the field so the user can type it manually.
+  const [textLoading, setTextLoading] = useState(false);
+  useEffect(() => {
+    const b = Number(form.book);
+    const c = Number(form.chapter);
+    const v = Number(form.verse);
+    if (!b || !c || !v) return;
+    let cancelled = false;
+    setTextLoading(true);
+    getVerseText(b, c, v)
+      .then((text) => {
+        if (cancelled) return;
+        setForm((s) => ({ ...s, text: text ?? "" }));
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setForm((s) => ({ ...s, text: "" }));
+      })
+      .finally(() => {
+        if (!cancelled) setTextLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [form.book, form.chapter, form.verse, setForm]);
   if (!isOpen) return null;
   return (
     <AppModal
@@ -209,13 +237,15 @@ export default function TodayVerseModal({ isOpen, form, setForm, submitting, sub
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="sm:col-span-3">
-            <label className="block text-sm font-medium text-primary-800">Text</label>
+            <label className="block text-sm font-medium text-primary-800">
+              Text {textLoading && <span className="text-xs text-primary-500">(loading...)</span>}
+            </label>
             <textarea
               value={form.text}
               onChange={(e) => setForm((s) => ({ ...s, text: e.target.value }))}
               rows={3}
               className="mt-1 block w-full rounded-md border border-primary-300 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
-              placeholder="He gives strength to the weary..."
+              placeholder={textLoading ? "Loading from Amharic bible..." : "He gives strength to the weary..."}
               required
             />
           </div>
