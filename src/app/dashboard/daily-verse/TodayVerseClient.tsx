@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { DailyVerse, WithId } from "@/lib/api/dailyVerse";
+import { Timestamp } from "firebase/firestore";
 import { useAppDispatch, useAppSelector } from "@/lib/redux/store";
 import TodayVerseHeader from "./_components/TodayVerseHeader";
 import TodayVerseModal from "./_components/TodayVerseModal";
@@ -145,6 +146,7 @@ export default function TodayVerseClient() {
         status: form.status || "active",
         display_date: { day, month, year },
         display_date_key: `${year}-${month}-${day}`,
+        display_timestamp: Timestamp.fromDate(new Date(year, month - 1, day)),
         section,
       };
       const tagVal = form.tag.trim();

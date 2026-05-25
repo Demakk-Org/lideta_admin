@@ -39,6 +39,7 @@ export type DailyVerse = {
   status: 'active' | 'inactive' | string;
   display_date: DisplayDate;
   display_date_key: string;
+  display_timestamp: Timestamp;
   section?: DailyVerseSection | null;
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
@@ -51,7 +52,7 @@ const colRef = collection(db, 'daily_verse');
 export async function listDailyVerses(): Promise<WithId<DailyVerse>[]> {
   console.log('[dailyVerseApi] listDailyVerses: querying daily_verse...');
   try {
-    const q = query(colRef, orderBy('createdAt', 'desc'));
+    const q = query(colRef, orderBy('display_timestamp', 'desc'));
     const snap = await getDocs(q);
     console.log('[dailyVerseApi] listDailyVerses: fetched', snap.size, 'docs');
     const items = snap.docs.map((d) => ({
