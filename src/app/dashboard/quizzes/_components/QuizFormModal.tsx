@@ -115,7 +115,7 @@ export default function QuizFormModal({
         await onEdit(initial.id, {
           title: title.trim(),
           description: description.trim(),
-          categoryId: isDaily ? null : categoryId.trim(),
+          categoryId: isDaily ? "" : categoryId.trim(),
           ageGroup,
           dificultyLevel,
           kind,

@@ -9,7 +9,7 @@ import {
 } from "@/lib/api/quizzes";
 import type { QuizDoc, WithId } from "@/lib/api/quizzes";
 
-function categoryName(id: string | null, lookup: Record<string, string>) {
+function categoryName(id: string, lookup: Record<string, string>) {
   if (!id) return null;
   return lookup[id] ?? id;
 }

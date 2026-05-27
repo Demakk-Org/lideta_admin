@@ -56,7 +56,7 @@ export const QUIZ_KIND_LABELS: Record<QuizKind, string> = {
 export type QuizDoc = {
   title: string;
   description: string;
-  categoryId: string | null;
+  categoryId: string;
   ageGroup: AgeGroup;
   dificultyLevel: DifficultyLevel;
   createdAt: string;
@@ -132,7 +132,7 @@ function mapDoc(id: string, data: Record<string, unknown>): WithId<QuizDoc> {
     id,
     title: typeof data.title === 'string' ? data.title : '',
     description: typeof data.description === 'string' ? data.description : '',
-    categoryId: typeof data.categoryId === 'string' ? data.categoryId : null,
+    categoryId: typeof data.categoryId === 'string' ? data.categoryId : '',
     ageGroup: coerceAgeGroup(data.ageGroup),
     dificultyLevel: coerceDifficulty(data.dificultyLevel),
     createdAt: normalizeTimestamp(data.createdAt) ?? new Date().toISOString(),
@@ -156,7 +156,7 @@ export async function listQuizzes(): Promise<WithId<QuizDoc>[]> {
 type WritePayload = {
   title: string;
   description: string;
-  categoryId: string | null;
+  categoryId: string;
   ageGroup: AgeGroup;
   dificultyLevel: DifficultyLevel;
   kind: QuizKind;
@@ -173,7 +173,7 @@ function sanitizeWrite(data: WritePayload) {
   return {
     title: data.title.trim(),
     description: data.description.trim(),
-    categoryId: trimmedCategory ? trimmedCategory : null,
+    categoryId: trimmedCategory,
     ageGroup: data.ageGroup,
     dificultyLevel: data.dificultyLevel,
     kind: data.kind,
@@ -186,8 +186,7 @@ function validateCreate(data: WritePayload) {
   if (!data.title.trim()) throw new Error('Quiz title is required');
   if (!data.description.trim()) throw new Error('Quiz description is required');
   if (data.kind === QuizKind.Standard) {
-    const cat = typeof data.categoryId === 'string' ? data.categoryId.trim() : '';
-    if (!cat) throw new Error('Quiz category is required');
+    if (!data.categoryId.trim()) throw new Error('Quiz category is required');
   }
 }
 
@@ -222,7 +221,7 @@ export async function addDailyQuiz(input: CreateDailyQuizInput): Promise<string>
   const payload: WritePayload = {
     title: input.title,
     description: input.description,
-    categoryId: null,
+    categoryId: '',
     ageGroup: input.ageGroup,
     dificultyLevel: input.dificultyLevel,
     kind: QuizKind.Daily,
@@ -248,7 +247,7 @@ export async function addDailyQuiz(input: CreateDailyQuizInput): Promise<string>
 export type UpdateQuizInput = {
   title: string;
   description: string;
-  categoryId: string | null;
+  categoryId: string;
   ageGroup: AgeGroup;
   dificultyLevel: DifficultyLevel;
   kind: QuizKind;
@@ -259,15 +258,14 @@ export async function updateQuiz(id: string, data: UpdateQuizInput): Promise<voi
   try {
     if (!data.title.trim()) throw new Error('Quiz title cannot be empty');
     if (!data.description.trim()) throw new Error('Quiz description cannot be empty');
-    const trimmedCategory =
-      typeof data.categoryId === 'string' ? data.categoryId.trim() : '';
+    const trimmedCategory = data.categoryId.trim();
     if (data.kind === QuizKind.Standard && !trimmedCategory) {
       throw new Error('Quiz category cannot be empty');
     }
     await updateDoc(doc(colRef, id), {
       title: data.title.trim(),
       description: data.description.trim(),
-      categoryId: data.kind === QuizKind.Daily ? null : trimmedCategory,
+      categoryId: data.kind === QuizKind.Daily ? '' : trimmedCategory,
       ageGroup: data.ageGroup,
       dificultyLevel: data.dificultyLevel,
     });
