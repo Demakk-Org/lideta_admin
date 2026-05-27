@@ -106,8 +106,6 @@ export default function QuizFormModal({
     try {
       if (!title.trim()) throw new Error("Title is required");
       if (!description.trim()) throw new Error("Description is required");
-      if (!categoryId.trim()) throw new Error("Category is required");
-
       if (!isDaily && !categoryId.trim()) {
         throw new Error("Category is required");
       }
