@@ -1,0 +1,25 @@
+name: Daily verse reminders cron
+
+# Fires every 5 minutes (the GitHub Actions minimum). Each tick POSTs to
+# the Vercel cron route, which queries Firestore for due reminders
+# (decision="reminded", remindAt <= now, notifiedAt == null) and sends
+# FCM to each matching user's Android tokens.
+#
+# Required GitHub repo secret: CRON_SECRET — must match the same env var
+# set on Vercel. The route rejects any request without it.
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Hit Vercel cron endpoint
+        run: |
+          curl -sS -X POST \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json" \
+            --fail-with-body \
+            https://lideta-admin.vercel.app/api/cron/daily-verse-reminders
