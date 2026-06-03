@@ -8,6 +8,13 @@ const PUSH_TOKENS_COLLECTION = 'push_tokens';
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
+// Per-day cap. Must match `maxRemindCount` in the Flutter cubit
+// (lib/features/daily_verse/presentation/bloc/daily_verse_reads_cubit.dart).
+// Docs with remindCount > MAX_REMIND_COUNT are skipped to avoid nagging.
+// The client also writes remindAt=null in that case (so they wouldn't
+// match the cron query anyway), but this check is defense in depth.
+const MAX_REMIND_COUNT = 3;
+
 const LOG_PREFIX = '[daily-verse-reminders]';
 
 function log(message: string, meta?: Record<string, unknown>) {
@@ -57,6 +64,7 @@ export async function POST(req: NextRequest) {
 
   let sent = 0;
   let skippedAlreadyNotified = 0;
+  let skippedCapReached = 0;
   let skippedNoTokens = 0;
   const errors: { uid: string; reason: string }[] = [];
 
@@ -74,6 +82,14 @@ export async function POST(req: NextRequest) {
       notifiedAt.toMillis() >= remindAt.toMillis()
     ) {
       skippedAlreadyNotified++;
+      continue;
+    }
+
+    // Per-day cap: the user has dismissed the reminder too many times
+    // today. Don't pester further until the date rolls over.
+    const remindCount = (data.remindCount as number | undefined) ?? 0;
+    if (remindCount > MAX_REMIND_COUNT) {
+      skippedCapReached++;
       continue;
     }
 
@@ -114,6 +130,7 @@ export async function POST(req: NextRequest) {
     processed: snap.size,
     sent,
     skippedAlreadyNotified,
+    skippedCapReached,
     skippedNoTokens,
     errorCount: errors.length,
     durationMs: Date.now() - startedAt,
@@ -129,9 +146,13 @@ function errMessage(e: unknown): string {
 }
 
 async function fetchTokensForUser(userId: string): Promise<string[]> {
+  // Android-only: iOS users get the local OS notification scheduled by
+  // the Flutter app's DailyVerseReminderScheduler, which works reliably
+  // on iOS. Sending FCM to iOS too would cause duplicate notifications.
   const snap = await adminDb
     .collection(PUSH_TOKENS_COLLECTION)
     .where('userId', '==', userId)
+    .where('platform', '==', 'android')
     .get();
   return snap.docs
     .map((d) => d.data().fcmToken as string | undefined)
