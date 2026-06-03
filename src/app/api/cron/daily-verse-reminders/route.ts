@@ -62,7 +62,17 @@ export async function POST(req: NextRequest) {
 
   for (const doc of snap.docs) {
     const data = doc.data();
-    if (data.notifiedAt) {
+    const notifiedAt = data.notifiedAt as Timestamp | undefined;
+    const remindAt = data.remindAt as Timestamp | undefined;
+
+    // Only skip if we already notified for this remind time (or a later one).
+    // If remindAt is newer than the last notifiedAt, a fresh reminder was
+    // scheduled after we last notified — so send again.
+    if (
+      notifiedAt &&
+      remindAt &&
+      notifiedAt.toMillis() >= remindAt.toMillis()
+    ) {
       skippedAlreadyNotified++;
       continue;
     }
