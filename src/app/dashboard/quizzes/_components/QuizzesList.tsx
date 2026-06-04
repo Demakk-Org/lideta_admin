@@ -62,7 +62,9 @@ export default function QuizzesList({
                 className={`rounded px-2 py-0.5 text-[11px] font-medium ${
                   it.kind === QuizKind.Daily
                     ? "bg-amber-100 text-amber-800"
-                    : "bg-primary-100 text-primary-700"
+                    : it.kind === QuizKind.Study
+                      ? "bg-sky-100 text-sky-800"
+                      : "bg-primary-100 text-primary-700"
                 }`}
               >
                 {QUIZ_KIND_LABELS[it.kind]}

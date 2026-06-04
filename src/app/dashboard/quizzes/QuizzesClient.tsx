@@ -8,16 +8,19 @@ import ConfirmDeleteModal from "@/components/ui/ConfirmDeleteModal";
 import {
   createDailyQuiz,
   createStandardQuiz,
+  createStudyQuiz,
   editQuiz,
   fetchQuizzes,
   publishQuizThunk,
   removeQuiz,
 } from "@/lib/redux/features/quizzesSlice";
 import { fetchQuizCategories } from "@/lib/redux/features/quizCategoriesSlice";
+import { fetchBibleStudies } from "@/lib/redux/features/bibleStudiesSlice";
 import { QuizKind } from "@/lib/api/quizzes";
 import type {
   CreateDailyQuizInput,
   CreateStandardQuizInput,
+  CreateStudyQuizInput,
   QuizDoc,
   UpdateQuizInput,
   WithId,
@@ -27,13 +30,14 @@ import QuizzesList from "./_components/QuizzesList";
 import QuizFormModal from "./_components/QuizFormModal";
 import QuestionsModal from "./_components/QuestionsModal";
 
-type KindFilter = "all" | QuizKind.Standard | QuizKind.Daily;
+type KindFilter = "all" | QuizKind.Standard | QuizKind.Daily | QuizKind.Study;
 type StatusFilter = "all" | "draft" | "published";
 
 export default function QuizzesClient() {
   const dispatch = useAppDispatch();
   const { items, status } = useAppSelector((s) => s.quizzes);
   const catState = useAppSelector((s) => s.quizCategories);
+  const studiesState = useAppSelector((s) => s.bibleStudies);
   const loading = status === "loading";
 
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -54,8 +58,9 @@ export default function QuizzesClient() {
   useEffect(() => {
     if (status === "idle") dispatch(fetchQuizzes());
     if (catState.status === "idle") dispatch(fetchQuizCategories());
+    if (studiesState.status === "idle") dispatch(fetchBibleStudies());
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, catState.status]);
+  }, [status, catState.status, studiesState.status]);
 
   useEffect(() => {
     if (typeof document !== "undefined") {
@@ -109,6 +114,16 @@ export default function QuizzesClient() {
     return set;
   }, [items]);
 
+  const existingStudyIds = useMemo(() => {
+    const set = new Set<string>();
+    for (const it of items) {
+      if (it.kind === QuizKind.Study && it.id.startsWith("study-")) {
+        set.add(it.id.slice("study-".length));
+      }
+    }
+    return set;
+  }, [items]);
+
   const editingItem = useMemo(
     () => (editingId ? items.find((x) => x.id === editingId) : undefined),
     [items, editingId],
@@ -137,6 +152,12 @@ export default function QuizzesClient() {
   const handleCreateDaily = async (payload: CreateDailyQuizInput) => {
     await dispatch(createDailyQuiz(payload)).unwrap();
     toast.success("Daily quiz added");
+    setIsModalOpen(false);
+  };
+
+  const handleCreateStudy = async (payload: CreateStudyQuizInput) => {
+    await dispatch(createStudyQuiz(payload)).unwrap();
+    toast.success("Study quiz added");
     setIsModalOpen(false);
   };
 
@@ -209,6 +230,7 @@ export default function QuizzesClient() {
               <option value="all">All</option>
               <option value={QuizKind.Standard}>Standard</option>
               <option value={QuizKind.Daily}>Daily</option>
+              <option value={QuizKind.Study}>Study</option>
             </select>
           </label>
           <label className="text-sm text-primary-700">
@@ -249,10 +271,13 @@ export default function QuizzesClient() {
         mode={modalType}
         initial={editingItem}
         categories={catState.items}
+        bibleStudies={studiesState.items}
         existingDailyDates={existingDailyDates}
+        existingStudyIds={existingStudyIds}
         onClose={closeModal}
         onCreateStandard={handleCreateStandard}
         onCreateDaily={handleCreateDaily}
+        onCreateStudy={handleCreateStudy}
         onEdit={handleEdit}
       />
 

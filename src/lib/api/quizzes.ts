@@ -32,6 +32,7 @@ export enum DifficultyLevel {
 export enum QuizKind {
   Standard = 'standard',
   Daily = 'daily',
+  Study = 'study',
 }
 
 export const AGE_GROUP_LABELS: Record<AgeGroup, string> = {
@@ -51,6 +52,7 @@ export const DIFFICULTY_LEVEL_LABELS: Record<DifficultyLevel, string> = {
 export const QUIZ_KIND_LABELS: Record<QuizKind, string> = {
   [QuizKind.Standard]: 'Standard',
   [QuizKind.Daily]: 'Daily',
+  [QuizKind.Study]: 'Study',
 };
 
 export type QuizDoc = {
@@ -77,6 +79,10 @@ export function formatDailyDateKey(d: Date): string {
 
 export function dailyQuizId(d: Date): string {
   return `daily-${formatDailyDateKey(d)}`;
+}
+
+export function studyQuizId(studyId: string): string {
+  return `study-${studyId}`;
 }
 
 function normalizeTimestamp(val: unknown): string | undefined {
@@ -124,6 +130,7 @@ function coerceDifficulty(val: unknown): DifficultyLevel {
 function coerceKind(val: unknown): QuizKind {
   const s = typeof val === 'string' ? val.toLowerCase() : '';
   if (s === QuizKind.Daily) return QuizKind.Daily;
+  if (s === QuizKind.Study) return QuizKind.Study;
   return QuizKind.Standard;
 }
 
@@ -244,6 +251,40 @@ export async function addDailyQuiz(input: CreateDailyQuizInput): Promise<string>
   }
 }
 
+export type CreateStudyQuizInput = Omit<WritePayload, 'kind' | 'createdAt' | 'categoryId'> & {
+  studyId: string;
+};
+
+export async function addStudyQuiz(input: CreateStudyQuizInput): Promise<string> {
+  const studyId = typeof input.studyId === 'string' ? input.studyId.trim() : '';
+  if (!studyId) throw new Error('A bible study is required');
+  const id = studyQuizId(studyId);
+  const payload: WritePayload = {
+    title: input.title,
+    description: input.description,
+    categoryId: '',
+    ageGroup: input.ageGroup,
+    dificultyLevel: input.dificultyLevel,
+    kind: QuizKind.Study,
+    createdAt: new Date(),
+  };
+  validateCreate(payload);
+  try {
+    const ref = doc(colRef, id);
+    const existing = await getDoc(ref);
+    if (existing.exists()) {
+      throw new Error('A study quiz already exists for this bible study');
+    }
+    await setDoc(ref, sanitizeWrite(payload));
+    console.log('[quizzesApi] created study id', id);
+    return id;
+  } catch (err) {
+    console.error('[quizzesApi] addStudyQuiz error', err);
+    if (err instanceof Error) throw err;
+    throw new Error('Failed to add study quiz');
+  }
+}
+
 export type UpdateQuizInput = {
   title: string;
   description: string;
@@ -265,7 +306,7 @@ export async function updateQuiz(id: string, data: UpdateQuizInput): Promise<voi
     await updateDoc(doc(colRef, id), {
       title: data.title.trim(),
       description: data.description.trim(),
-      categoryId: data.kind === QuizKind.Daily ? '' : trimmedCategory,
+      categoryId: data.kind === QuizKind.Standard ? trimmedCategory : '',
       ageGroup: data.ageGroup,
       dificultyLevel: data.dificultyLevel,
     });

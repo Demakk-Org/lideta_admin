@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
     logError('query failed', { error: errMessage(e) });
     return NextResponse.json(
       { error: 'query failed', detail: errMessage(e) },
-      { status: 500 }
+      { status: 500 },
     );
   }
 
@@ -122,7 +122,10 @@ export async function POST(req: NextRequest) {
       log('reminder sent', { uid, tokenCount: tokens.length });
     } else {
       errors.push({ uid, reason: 'all tokens failed' });
-      logError('all tokens failed for user', { uid, tokenCount: tokens.length });
+      logError('all tokens failed for user', {
+        uid,
+        tokenCount: tokens.length,
+      });
     }
   }
 
@@ -203,7 +206,7 @@ async function sendOne(uid: string, token: string): Promise<boolean> {
       await Promise.all(stale.docs.map((d) => d.ref.delete()));
       console.warn(
         `${LOG_PREFIX} removed dead token for ${uid}`,
-        JSON.stringify({ code, removed: stale.size })
+        JSON.stringify({ code, removed: stale.size }),
       );
       return false;
     }

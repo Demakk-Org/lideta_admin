@@ -2,6 +2,7 @@ import { createAsyncThunk, createSlice, PayloadAction } from '@reduxjs/toolkit';
 import {
   addDailyQuiz,
   addStandardQuiz,
+  addStudyQuiz,
   deleteQuiz,
   listQuizzes,
   publishQuiz,
@@ -10,6 +11,7 @@ import {
 import type {
   CreateDailyQuizInput,
   CreateStandardQuizInput,
+  CreateStudyQuizInput,
   QuizDoc,
   UpdateQuizInput,
   WithId,
@@ -43,6 +45,14 @@ export const createDailyQuiz = createAsyncThunk(
   'quizzes/createDaily',
   async (payload: CreateDailyQuizInput, { dispatch }) => {
     await addDailyQuiz(payload);
+    await dispatch(fetchQuizzes());
+  },
+);
+
+export const createStudyQuiz = createAsyncThunk(
+  'quizzes/createStudy',
+  async (payload: CreateStudyQuizInput, { dispatch }) => {
+    await addStudyQuiz(payload);
     await dispatch(fetchQuizzes());
   },
 );
@@ -96,6 +106,9 @@ const quizzesSlice = createSlice({
         state.error = action.error.message || 'Create failed';
       })
       .addCase(createDailyQuiz.rejected, (state, action) => {
+        state.error = action.error.message || 'Create failed';
+      })
+      .addCase(createStudyQuiz.rejected, (state, action) => {
         state.error = action.error.message || 'Create failed';
       })
       .addCase(editQuiz.rejected, (state, action) => {

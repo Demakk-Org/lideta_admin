@@ -16,11 +16,13 @@ import {
 import type {
   CreateDailyQuizInput,
   CreateStandardQuizInput,
+  CreateStudyQuizInput,
   QuizDoc,
   UpdateQuizInput,
   WithId,
 } from "@/lib/api/quizzes";
 import type { QuizCategory, WithId as WithCatId } from "@/lib/api/quizCategories";
+import type { BibleStudy, WithId as WithStudyId } from "@/lib/api/bibleStudies";
 
 function todayDateInputValue(): string {
   return formatDailyDateKey(new Date());
@@ -44,20 +46,26 @@ export default function QuizFormModal({
   mode,
   initial,
   categories,
+  bibleStudies,
   existingDailyDates,
+  existingStudyIds,
   onClose,
   onCreateStandard,
   onCreateDaily,
+  onCreateStudy,
   onEdit,
 }: {
   open: boolean;
   mode: "add" | "edit";
   initial?: Partial<WithId<QuizDoc>>;
   categories: WithCatId<QuizCategory>[];
+  bibleStudies: WithStudyId<BibleStudy>[];
   existingDailyDates: Set<string>;
+  existingStudyIds: Set<string>;
   onClose: () => void;
   onCreateStandard: (payload: CreateStandardQuizInput) => Promise<void> | void;
   onCreateDaily: (payload: CreateDailyQuizInput) => Promise<void> | void;
+  onCreateStudy: (payload: CreateStudyQuizInput) => Promise<void> | void;
   onEdit: (id: string, payload: UpdateQuizInput) => Promise<void> | void;
 }) {
   const [kind, setKind] = useState<QuizKind>(QuizKind.Standard);
@@ -69,6 +77,7 @@ export default function QuizFormModal({
     DifficultyLevel.Any,
   );
   const [dailyDate, setDailyDate] = useState<string>(todayDateInputValue());
+  const [studyId, setStudyId] = useState<string>("");
 
   useEffect(() => {
     if (!open) return;
@@ -79,34 +88,62 @@ export default function QuizFormModal({
     setAgeGroup(initial?.ageGroup ?? AgeGroup.All);
     setDificultyLevel(initial?.dificultyLevel ?? DifficultyLevel.Any);
     setDailyDate(todayDateInputValue());
+    setStudyId("");
   }, [open, initial]);
 
   useEffect(() => {
-    if (kind === QuizKind.Daily) setCategoryId("");
+    if (kind !== QuizKind.Standard) setCategoryId("");
   }, [kind]);
 
   const isEdit = mode === "edit";
+  const isStandard = kind === QuizKind.Standard;
   const isDaily = kind === QuizKind.Daily;
+  const isStudy = kind === QuizKind.Study;
 
   const dailyDateTaken =
     !isEdit && isDaily && !!dailyDate && existingDailyDates.has(dailyDate);
 
+  const studyIdTaken =
+    !isEdit && isStudy && !!studyId && existingStudyIds.has(studyId);
+
+  const selectedStudyName = useMemo(() => {
+    if (!studyId) return "";
+    const match = bibleStudies.find((s) => s.id === studyId);
+    return match?.title || studyId;
+  }, [bibleStudies, studyId]);
+
   const canSubmit = useMemo(() => {
     if (!title.trim() || !description.trim()) return false;
-    if (!isDaily && !categoryId.trim()) return false;
+    if (isStandard && !categoryId.trim()) return false;
     if (!isEdit && isDaily) {
       if (!parseDateInput(dailyDate)) return false;
       if (dailyDateTaken) return false;
     }
+    if (!isEdit && isStudy) {
+      if (!studyId) return false;
+      if (studyIdTaken) return false;
+    }
     return true;
-  }, [title, description, categoryId, isEdit, isDaily, dailyDate, dailyDateTaken]);
+  }, [
+    title,
+    description,
+    categoryId,
+    isEdit,
+    isStandard,
+    isDaily,
+    isStudy,
+    dailyDate,
+    dailyDateTaken,
+    studyId,
+    studyIdTaken,
+  ]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       if (!title.trim()) throw new Error("Title is required");
       if (!description.trim()) throw new Error("Description is required");
-      if (!isDaily && !categoryId.trim()) {
+      if (isStandard && !categoryId.trim()) {
         throw new Error("Category is required");
       }
 
@@ -115,10 +152,25 @@ export default function QuizFormModal({
         await onEdit(initial.id, {
           title: title.trim(),
           description: description.trim(),
-          categoryId: isDaily ? "" : categoryId.trim(),
+          categoryId: isStandard ? categoryId.trim() : "",
           ageGroup,
           dificultyLevel,
           kind,
+        });
+        return;
+      }
+
+      if (isStudy) {
+        if (!studyId) throw new Error("Pick a bible study for the study quiz");
+        if (existingStudyIds.has(studyId)) {
+          throw new Error("A study quiz already exists for this bible study");
+        }
+        await onCreateStudy({
+          title: title.trim(),
+          description: description.trim(),
+          ageGroup,
+          dificultyLevel,
+          studyId,
         });
         return;
       }
@@ -194,9 +246,53 @@ export default function QuizFormModal({
                 <option value={QuizKind.Daily}>
                   {QUIZ_KIND_LABELS[QuizKind.Daily]}
                 </option>
+                <option value={QuizKind.Study}>
+                  {QUIZ_KIND_LABELS[QuizKind.Study]}
+                </option>
               </select>
             )}
           </div>
+
+          {!isEdit && isStudy && (
+            <div>
+              <label className="block text-sm font-medium text-primary-800">
+                Bible Study
+              </label>
+              <select
+                value={studyId}
+                onChange={(e) => setStudyId(e.target.value)}
+                className={`mt-1 block w-full rounded-md border bg-white px-3 py-2 focus:outline-none focus:ring-2 ${
+                  studyIdTaken
+                    ? "border-red-400 focus:ring-red-500"
+                    : "border-primary-300 focus:ring-primary-500"
+                }`}
+                required
+              >
+                <option value="">Select bible study</option>
+                {bibleStudies.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.title || s.id}
+                  </option>
+                ))}
+              </select>
+              {bibleStudies.length === 0 ? (
+                <p className="mt-1 text-xs text-primary-600">
+                  No bible studies found in <code>bible_studies</code>.
+                </p>
+              ) : studyIdTaken ? (
+                <p className="mt-1 text-xs text-red-600">
+                  A study quiz already exists for this bible study. Pick another.
+                </p>
+              ) : selectedStudyName ? (
+                <p className="mt-1 text-xs text-primary-600">
+                  Quiz will be linked to{" "}
+                  <span className="font-medium text-primary-800">
+                    {selectedStudyName}
+                  </span>
+                </p>
+              ) : null}
+            </div>
+          )}
 
           {!isEdit && isDaily && (
             <div>
@@ -271,7 +367,7 @@ export default function QuizFormModal({
             />
           </div>
 
-          {!isDaily && (
+          {isStandard && (
             <div>
               <label className="block text-sm font-medium text-primary-800">
                 Category
