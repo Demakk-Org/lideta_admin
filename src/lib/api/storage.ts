@@ -93,6 +93,52 @@ export async function uploadEventImage(
   }
 }
 
+export async function uploadBibleStudyImage(
+  file: File,
+  titleOrCategory: string
+): Promise<string> {
+  console.log('[storageApi] uploadBibleStudyImage start', { name: file.name, size: file.size });
+  try {
+    const ts = Date.now();
+    const base = sanitizeSegment(titleOrCategory || 'untitled');
+    const path = `bible_studies/${base}/${ts}-${file.name}`;
+    const storageRef = ref(storage, path);
+    const metadata = { contentType: file.type || 'application/octet-stream' };
+    const snap = await uploadBytes(storageRef, file, metadata);
+    const url = await getDownloadURL(snap.ref);
+    console.log('[storageApi] uploadBibleStudyImage success', url);
+    return url;
+  } catch (err) {
+    console.error('[storageApi] uploadBibleStudyImage error', err);
+    throw new Error('Failed to upload bible study image');
+  }
+}
+
+export async function uploadBibleStudyMaterial(
+  file: File,
+  type: string,
+  titleOrStudy: string
+): Promise<string> {
+  console.log('[storageApi] uploadBibleStudyMaterial start', { type, name: file.name, size: file.size });
+  try {
+    const ts = Date.now();
+    const typeFolder = sanitizeSegment(type || 'other');
+    const base = sanitizeSegment(titleOrStudy || 'material');
+    // Group uploads by the selected material type, e.g.
+    // bible_studies/materials/audio/<title>/<ts>-<file>
+    const path = `bible_studies/materials/${typeFolder}/${base}/${ts}-${file.name}`;
+    const storageRef = ref(storage, path);
+    const metadata = { contentType: file.type || 'application/octet-stream' };
+    const snap = await uploadBytes(storageRef, file, metadata);
+    const url = await getDownloadURL(snap.ref);
+    console.log('[storageApi] uploadBibleStudyMaterial success', url);
+    return url;
+  } catch (err) {
+    console.error('[storageApi] uploadBibleStudyMaterial error', err);
+    throw new Error('Failed to upload bible study material');
+  }
+}
+
 export async function uploadNewsImage(
   file: File,
   titleOrCategory: string
