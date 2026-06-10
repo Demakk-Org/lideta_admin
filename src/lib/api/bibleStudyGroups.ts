@@ -8,6 +8,7 @@ import {
   doc,
   getDocs,
   query,
+  serverTimestamp,
   updateDoc,
 } from 'firebase/firestore';
 
@@ -305,6 +306,39 @@ function validate(data: BibleStudyGroupInput) {
   }
 }
 
+// Posts a "Group created" system message into each study thread of the group.
+// Messages live at bible_study_groups/{groupId}/bible_studies/{bibleStudyId}/messages.
+// Best-effort: a messaging failure must not fail group creation.
+async function postGroupCreatedMessages(
+  groupId: string,
+  bibleStudyIds: string[],
+): Promise<void> {
+  try {
+    await Promise.all(
+      bibleStudyIds.filter(Boolean).map((bibleStudyId) =>
+        addDoc(
+          collection(db, 'bible_study_groups', groupId, 'bible_studies', bibleStudyId, 'messages'),
+          {
+            senderId: null,
+            content: 'Group created',
+            timestamp: serverTimestamp(),
+            isEdited: false,
+            isSystem: true,
+            attachments: [],
+            replyToMessageId: null,
+            mentionedUserIds: [],
+            type: 'system',
+            bibleStudyId,
+            groupId,
+          },
+        ),
+      ),
+    );
+  } catch (err) {
+    console.error('[bibleStudyGroupsApi] postGroupCreatedMessages error', err);
+  }
+}
+
 export async function addBibleStudyGroup(
   data: BibleStudyGroupInput,
 ): Promise<string> {
@@ -325,6 +359,10 @@ export async function addBibleStudyGroup(
       currentStudyIndex: 0,
     });
     console.log('[bibleStudyGroupsApi] created id', docRef.id);
+    await postGroupCreatedMessages(
+      docRef.id,
+      (data.bibleStudyIds ?? []).filter(Boolean),
+    );
     return docRef.id;
   } catch (err) {
     console.error('[bibleStudyGroupsApi] addBibleStudyGroup error', err);
