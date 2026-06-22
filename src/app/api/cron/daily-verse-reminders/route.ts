@@ -69,33 +69,60 @@ export async function POST(req: NextRequest) {
   const errors: { uid: string; reason: string }[] = [];
 
   for (const doc of snap.docs) {
-    const data = doc.data();
-    const notifiedAt = data.notifiedAt as Timestamp | undefined;
-    const remindAt = data.remindAt as Timestamp | undefined;
-
-    // Only skip if we already notified for this remind time (or a later one).
-    // If remindAt is newer than the last notifiedAt, a fresh reminder was
-    // scheduled after we last notified — so send again.
-    if (
-      notifiedAt &&
-      remindAt &&
-      notifiedAt.toMillis() >= remindAt.toMillis()
-    ) {
-      skippedAlreadyNotified++;
-      continue;
-    }
-
-    // Per-day cap: the user has dismissed the reminder too many times
-    // today. Don't pester further until the date rolls over.
-    const remindCount = (data.remindCount as number | undefined) ?? 0;
-    if (remindCount > MAX_REMIND_COUNT) {
-      skippedCapReached++;
-      continue;
-    }
-
     const uid = doc.ref.parent.parent?.id;
     if (!uid) {
       logError('skipping doc with no parent uid', { docPath: doc.ref.path });
+      continue;
+    }
+
+    // Atomically "claim" this reminder before sending. Two cron requests can
+    // arrive in the same tick (two GitHub workflows hit this endpoint, plus
+    // occasional retries). A read-then-send-then-write flow lets both pass the
+    // dedup check and both send. Doing the check + claim inside a transaction
+    // ensures exactly one caller wins; the loser sees notifiedAt already set
+    // and skips. We record the previous notifiedAt so we can roll back if the
+    // send fails entirely.
+    let claim: { prevNotifiedAt: Timestamp | null } | 'skip-notified' | 'skip-cap';
+    try {
+      claim = await adminDb.runTransaction(async (tx) => {
+        const fresh = await tx.get(doc.ref);
+        const data = fresh.data() ?? {};
+        const notifiedAt = data.notifiedAt as Timestamp | undefined;
+        const remindAt = data.remindAt as Timestamp | undefined;
+
+        // Already notified for this remind time (or a later one). If remindAt
+        // is newer than notifiedAt, a fresh reminder was scheduled after we
+        // last notified — so we still send.
+        if (
+          notifiedAt &&
+          remindAt &&
+          notifiedAt.toMillis() >= remindAt.toMillis()
+        ) {
+          return 'skip-notified' as const;
+        }
+
+        // Per-day cap: the user dismissed the reminder too many times today.
+        const remindCount = (data.remindCount as number | undefined) ?? 0;
+        if (remindCount > MAX_REMIND_COUNT) {
+          return 'skip-cap' as const;
+        }
+
+        // Claim it: stamp notifiedAt now so concurrent callers skip.
+        tx.update(doc.ref, { notifiedAt: FieldValue.serverTimestamp() });
+        return { prevNotifiedAt: notifiedAt ?? null };
+      });
+    } catch (e) {
+      logError('claim transaction failed', { uid, error: errMessage(e) });
+      errors.push({ uid, reason: errMessage(e) });
+      continue;
+    }
+
+    if (claim === 'skip-notified') {
+      skippedAlreadyNotified++;
+      continue;
+    }
+    if (claim === 'skip-cap') {
+      skippedCapReached++;
       continue;
     }
 
@@ -103,6 +130,8 @@ export async function POST(req: NextRequest) {
     if (tokens.length === 0) {
       skippedNoTokens++;
       log('no tokens for user', { uid });
+      // Roll back the claim so a later tick (once a token registers) can retry.
+      await rollbackClaim(doc.ref, claim.prevNotifiedAt);
       continue;
     }
 
@@ -112,12 +141,12 @@ export async function POST(req: NextRequest) {
     } catch (e) {
       logError('send threw for user', { uid, error: errMessage(e) });
       errors.push({ uid, reason: errMessage(e) });
+      await rollbackClaim(doc.ref, claim.prevNotifiedAt);
       continue;
     }
     const anySucceeded = sendResults.some((ok) => ok);
 
     if (anySucceeded) {
-      await doc.ref.update({ notifiedAt: FieldValue.serverTimestamp() });
       sent++;
       log('reminder sent', { uid, tokenCount: tokens.length });
     } else {
@@ -126,6 +155,7 @@ export async function POST(req: NextRequest) {
         uid,
         tokenCount: tokens.length,
       });
+      await rollbackClaim(doc.ref, claim.prevNotifiedAt);
     }
   }
 
@@ -148,6 +178,24 @@ function errMessage(e: unknown): string {
   return String(e);
 }
 
+// Undo a claim when the send didn't actually happen, so a future tick can
+// retry. Restores the previous notifiedAt (or clears it if there was none).
+async function rollbackClaim(
+  ref: FirebaseFirestore.DocumentReference,
+  prevNotifiedAt: Timestamp | null,
+) {
+  try {
+    await ref.update({
+      notifiedAt: prevNotifiedAt ?? FieldValue.delete(),
+    });
+  } catch (e) {
+    logError('rollback of claim failed', {
+      docPath: ref.path,
+      error: errMessage(e),
+    });
+  }
+}
+
 async function fetchTokensForUser(userId: string): Promise<string[]> {
   // Android-only: iOS users get the local OS notification scheduled by
   // the Flutter app's DailyVerseReminderScheduler, which works reliably
@@ -157,9 +205,13 @@ async function fetchTokensForUser(userId: string): Promise<string[]> {
     .where('userId', '==', userId)
     .where('platform', '==', 'android')
     .get();
-  return snap.docs
+  const tokens = snap.docs
     .map((d) => d.data().fcmToken as string | undefined)
     .filter((t): t is string => typeof t === 'string' && t.length > 0);
+  // De-dupe: the same FCM token can be stored under multiple device docs
+  // (e.g. deviceId churned on reinstall while the token persisted). Sending
+  // to the same token twice produces duplicate notifications on one phone.
+  return Array.from(new Set(tokens));
 }
 
 /** Returns true if delivered, false if token was dead and cleaned up. */
