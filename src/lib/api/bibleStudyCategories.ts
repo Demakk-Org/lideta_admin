@@ -159,13 +159,20 @@ export async function recountBibleStudyCategoryCounts(): Promise<void> {
 
     const counts: Record<string, number> = {};
     studiesSnap.forEach((d) => {
-      const cat = (d.data() as Record<string, unknown>).category;
-      const id =
-        cat &&
-        typeof cat === 'object' &&
-        typeof (cat as Record<string, unknown>).id === 'string'
-          ? ((cat as Record<string, unknown>).id as string)
-          : '';
+      const data = d.data() as Record<string, unknown>;
+      // Prefer the new `categoryId` reference; fall back to the id embedded in
+      // the legacy `category` object for studies not yet migrated.
+      let id = typeof data.categoryId === 'string' ? data.categoryId.trim() : '';
+      if (!id) {
+        const cat = data.category;
+        if (
+          cat &&
+          typeof cat === 'object' &&
+          typeof (cat as Record<string, unknown>).id === 'string'
+        ) {
+          id = ((cat as Record<string, unknown>).id as string).trim();
+        }
+      }
       if (id) counts[id] = (counts[id] ?? 0) + 1;
     });
 

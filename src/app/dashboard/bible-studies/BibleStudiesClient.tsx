@@ -15,7 +15,6 @@ import {
 import { fetchBibleStudyCategories } from "@/lib/redux/features/bibleStudyCategoriesSlice";
 import type {
   BibleStudy,
-  EmbeddedCategory,
   StudyMaterial,
   Verse,
   WithId,
@@ -27,11 +26,13 @@ import StudyPlansModal from "./_components/StudyPlansModal";
 
 function StudiesList({
   items,
+  categoryTitleById,
   onEdit,
   onDelete,
   onManagePlans,
 }: {
   items: WithId<BibleStudy>[];
+  categoryTitleById: Record<string, string>;
   onEdit: (it: WithId<BibleStudy>) => void;
   onDelete: (id: string) => void;
   onManagePlans: (it: WithId<BibleStudy>) => void;
@@ -53,8 +54,10 @@ function StudiesList({
               </span>
             )}
           </div>
-          {it.category?.title && (
-            <p className="text-xs text-primary-600">{it.category.title}</p>
+          {categoryTitleById[it.categoryId] && (
+            <p className="text-xs text-primary-600">
+              {categoryTitleById[it.categoryId]}
+            </p>
           )}
           {it.description && (
             <p className="mt-2 line-clamp-3 text-sm text-primary-800">
@@ -120,6 +123,10 @@ export default function BibleStudiesClient() {
   const catState = useAppSelector((s) => s.bibleStudyCategories);
   const loading = status === "loading";
 
+  const categoryTitleById = Object.fromEntries(
+    catState.items.map((c) => [c.id, c.title]),
+  );
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalType, setModalType] = useState<"add" | "edit">("add");
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -163,7 +170,7 @@ export default function BibleStudiesClient() {
     setEditingId(it.id);
     setTopicTitle(it.topicTitle ?? "");
     setDescription(it.description ?? "");
-    setCategoryId(it.category?.id ?? "");
+    setCategoryId(it.categoryId ?? "");
     setMaterials(it.materials ?? []);
     setKeyVerses(it.keyVerses ?? []);
     setIsModalOpen(true);
@@ -179,21 +186,12 @@ export default function BibleStudiesClient() {
       const cat = catState.items.find((c) => c.id === categoryId);
       if (!cat) throw new Error("A category is required");
 
-      const category: EmbeddedCategory = {
-        id: cat.id,
-        title: cat.title,
-        description: cat.description,
-        imageUrl: cat.imageUrl,
-        tags: cat.tags,
-        studyCount: cat.studyCount,
-      };
-
       const payload = {
         topicTitle: topicTitle.trim(),
         description: description.trim(),
         materials,
         keyVerses,
-        category,
+        categoryId: cat.id,
       };
 
       if (editingId) {
@@ -246,6 +244,7 @@ export default function BibleStudiesClient() {
 
       <StudiesList
         items={items}
+        categoryTitleById={categoryTitleById}
         onEdit={openEdit}
         onDelete={onDelete}
         onManagePlans={(it) => setPlansStudy(it)}

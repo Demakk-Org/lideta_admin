@@ -3,6 +3,7 @@ import {
   addDoc,
   collection,
   deleteDoc,
+  deleteField,
   doc,
   getDoc,
   getDocs,
@@ -69,20 +70,10 @@ export type StudyPlan = {
   discussionQuestions: string[];
 };
 
-// Category embedded inside a bible study. Matches `BibleStudyCategory.fromJson`
-// (which reads a nullable `id`). We embed `id` so the admin knows which
-// category was selected.
-export type EmbeddedCategory = {
-  id?: string;
-  title: string;
-  description: string;
-  imageUrl?: string;
-  tags: string[];
-  studyCount: number;
-};
-
 // Mirrors the Flutter `BibleStudy` model. `title` is a derived convenience
 // field (= `topicTitle`) consumed by the quizzes feature; it is never written.
+// The category is stored as a reference (`bibleStudyCategories/{id}`) — only the
+// id is persisted; the category details are resolved separately.
 export type BibleStudy = {
   title: string;
   topicTitle: string;
@@ -90,7 +81,7 @@ export type BibleStudy = {
   hasQuiz: boolean;
   materials: StudyMaterial[];
   keyVerses: Verse[];
-  category: EmbeddedCategory | null;
+  categoryId: string;
   studyPlans: StudyPlan[];
 };
 
@@ -159,25 +150,16 @@ function mapStudyPlan(raw: unknown): StudyPlan {
   };
 }
 
-function mapCategory(raw: unknown): EmbeddedCategory | null {
-  if (!isRecord(raw)) return null;
-  const tags = Array.isArray(raw.tags)
-    ? raw.tags.map((t) => String(t)).filter(Boolean)
-    : [];
-  return {
-    id: typeof raw.id === 'string' ? raw.id : undefined,
-    title: typeof raw.title === 'string' ? raw.title : '',
-    description: typeof raw.description === 'string' ? raw.description : '',
-    imageUrl:
-      typeof raw.imageUrl === 'string' && raw.imageUrl.trim()
-        ? raw.imageUrl
-        : undefined,
-    tags,
-    studyCount:
-      typeof raw.studyCount === 'number' && Number.isFinite(raw.studyCount)
-        ? raw.studyCount
-        : 0,
-  };
+// Resolves the category reference id from a stored study doc. Prefers the new
+// `categoryId` field, falling back to the id embedded in the legacy `category`
+// object so studies written before the migration keep resolving.
+export function readCategoryId(data: Record<string, unknown>): string {
+  if (typeof data.categoryId === 'string' && data.categoryId.trim()) {
+    return data.categoryId;
+  }
+  const cat = data.category;
+  if (isRecord(cat) && typeof cat.id === 'string') return cat.id;
+  return '';
 }
 
 function mapDoc(id: string, data: Record<string, unknown>): WithId<BibleStudy> {
@@ -199,7 +181,7 @@ function mapDoc(id: string, data: Record<string, unknown>): WithId<BibleStudy> {
     keyVerses: Array.isArray(data.keyVerses)
       ? data.keyVerses.map(mapVerse)
       : [],
-    category: mapCategory(data.category),
+    categoryId: readCategoryId(data),
     studyPlans: Array.isArray(data.studyPlans)
       ? data.studyPlans.map(mapStudyPlan)
       : [],
@@ -227,7 +209,7 @@ export type BibleStudyInput = {
   description: string;
   materials: StudyMaterial[];
   keyVerses: Verse[];
-  category: EmbeddedCategory | null;
+  categoryId: string;
 };
 
 function verseHasContent(v: Verse): boolean {
@@ -279,20 +261,6 @@ function studyPlanHasContent(p: Record<string, unknown>): boolean {
   );
 }
 
-function sanitizeCategory(c: EmbeddedCategory): Record<string, unknown> {
-  return {
-    ...(c.id ? { id: c.id } : {}),
-    title: c.title.trim(),
-    description: c.description.trim(),
-    imageUrl: c.imageUrl?.trim() ? c.imageUrl.trim() : null,
-    tags: Array.isArray(c.tags) ? c.tags : [],
-    studyCount:
-      typeof c.studyCount === 'number' && Number.isFinite(c.studyCount)
-        ? c.studyCount
-        : 0,
-  };
-}
-
 // Shared fields for create and update. Deliberately excludes `hasQuiz` and
 // `studyPlans` so an update never clobbers the quiz flag or the separately
 // managed study plans.
@@ -304,14 +272,14 @@ function buildPayload(data: BibleStudyInput): Record<string, unknown> {
       .filter(materialHasContent)
       .map(sanitizeMaterial),
     keyVerses: (data.keyVerses ?? []).filter(verseHasContent).map(sanitizeVerse),
-    category: data.category ? sanitizeCategory(data.category) : null,
+    categoryId: data.categoryId.trim(),
   };
 }
 
 function validate(data: BibleStudyInput) {
   if (!data.topicTitle.trim()) throw new Error('Topic title is required');
   if (!data.description.trim()) throw new Error('Description is required');
-  if (!data.category) throw new Error('A category is required');
+  if (!data.categoryId.trim()) throw new Error('A category is required');
 }
 
 export async function addBibleStudy(data: BibleStudyInput): Promise<string> {
@@ -342,7 +310,12 @@ export async function updateBibleStudy(
   console.log('[bibleStudiesApi] updateBibleStudy id', id, 'data', data);
   try {
     validate(data);
-    await updateDoc(doc(colRef, id), buildPayload(data));
+    // Write the new `categoryId` and drop any legacy embedded `category` object
+    // left over from before the migration.
+    await updateDoc(doc(colRef, id), {
+      ...buildPayload(data),
+      category: deleteField(),
+    });
     await syncCategoryCounts();
   } catch (err) {
     console.error('[bibleStudiesApi] updateBibleStudy error', err);
