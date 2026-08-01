@@ -31,7 +31,7 @@ read currentUser.phoneNumber → build/patch Firestore users/{uid} doc
 ```jsonc
 {
   "phoneNumber": "+251931213930",  // E.164, REQUIRED (must include +country code)
-  "purpose": "auth",               // "auth" (login-or-signup) | "link"; default "auth"
+  "purpose": "auth",               // "auth" (login-or-signup) | "signup" | "link"; default "auth"
   "lang": "am",                    // "en" | "am" | "om" — SMS language; default "en"
   "idToken": "<firebase-id-token>" // REQUIRED only when purpose == "link"
 }
@@ -42,13 +42,23 @@ read currentUser.phoneNumber → build/patch Firestore users/{uid} doc
 { "requestId": "E6rrGwMSanfEK685RjrU", "expiresInSeconds": 300, "resendAfterSeconds": 60 }
 ```
 → Keep `requestId`; you pass it to `/otp/verify`. Start a `resendAfterSeconds` countdown
-before allowing "Resend". `200` is returned **whether or not the account already exists**
-(privacy — don't infer existence from this).
+before allowing "Resend". For `purpose:"auth"` and `"reset"`, `200` is returned
+**whether or not the account already exists** (privacy — don't infer existence from this).
+
+> **Use `purpose:"signup"` on the Create-account screen.** With `"auth"` a number that
+> already has an account gets an SMS and is silently signed *into* that account — no
+> explanation to the user. `"signup"` instead fails fast with `409 account_exists`
+> before any SMS is sent, so the form can say "You already have an account with this
+> number — log in instead" and offer to switch to the login screen. Use `"auth"` on the
+> **login** screen (unchanged). A rejected `signup` still counts against the resend
+> cooldown and hourly caps, so don't call it to probe numbers as the user types —
+> call it on submit.
 
 **Errors**
 
 | HTTP | body | frontend action |
 |---|---|---|
+| `409` | `{"error":{"code":"account_exists","message":"An account already exists for this phone number."}}` | (signup only) Show your localized "you already have an account — log in instead" and route to login. **No SMS was sent.** |
 | `400` | `{"error":{"code":"invalid_phone","message":"phoneNumber must be E.164 (e.g. +2519…)"}}` | Show "invalid phone number". |
 | `401` | `{"error":{"code":"unauthorized","message":"Missing or invalid app secret"}}` | App misconfig — the `x-otp-app-secret` header is missing/wrong (or bad `idToken` on link). |
 | `429` | `{"error":{"code":"rate_limited","message":"Rate limited (cooldown)"},"resendAfterSeconds":31}` | Disable resend for `resendAfterSeconds`; show "try again in Ns". |
@@ -96,6 +106,7 @@ hint; the app still owns the field in `users/{uid}`.
 | `410` | `{"error":{"code":"otp_expired","message":"This code has expired"}}` (or `"...already been used"`) | Code expired/used — send them back to request a new one. |
 | `429` | `{"error":{"code":"too_many_attempts","message":"Too many attempts; request a new code"}}` | Too many wrong tries (>5); the code is dead — request a new one. |
 | `409` | `{"error":{"code":"phone_in_use","message":"Phone number already in use by another account"}}` | (link only) This phone belongs to another account. |
+| `409` | `{"error":{"code":"account_exists","message":"An account already exists for this phone number."}}` | (signup only) The account was created between request and verify (e.g. another device). Same handling as the `/otp/request` `409`; the code is spent, so route to login rather than retrying it. |
 | `401` | `{"error":{"code":"unauthorized","message":"..."}}` | Missing app secret / bad `idToken` on link. |
 
 ---

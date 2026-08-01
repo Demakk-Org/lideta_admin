@@ -5,14 +5,10 @@ import { OTP_REQUEST_SECRET, missingCoreConfig } from '@/lib/otp/config';
 import { errorResponse } from '@/lib/otp/errors';
 import { makeOtpLogger } from '@/lib/otp/log';
 import { verifyAndConsumeOtp } from '@/lib/otp/store';
+import { isUserNotFound, phoneAccountExists } from '@/lib/otp/users';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-
-// firebase-admin error code for a phone/uid lookup miss.
-function isUserNotFound(e: unknown): boolean {
-  return (e as { code?: string })?.code === 'auth/user-not-found';
-}
 
 export async function POST(req: NextRequest) {
   const log = makeOtpLogger('otp/verify', crypto.randomUUID());
@@ -147,7 +143,20 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // purpose "auth": login-or-signup by phone.
+    // Race: the account can be created between /otp/request and here (same person on
+    // another device, or a concurrent "auth" flow). A "signup" code must never sign
+    // someone into an account that already existed, so re-check now. The code is
+    // already consumed by verifyAndConsumeOtp above — a rejected signup burns it.
+    if (data.purpose === 'signup' && (await phoneAccountExists(phoneNumber))) {
+      log.warn('account_exists', { phoneNumber, requestId, purpose: data.purpose });
+      return errorResponse(
+        409,
+        'account_exists',
+        'An account already exists for this phone number.',
+      );
+    }
+
+    // purpose "auth"/"signup": sign in by phone, creating the account if needed.
     let user;
     let isNewUser = false;
     try {

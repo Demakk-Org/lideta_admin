@@ -7,7 +7,9 @@ import { verifyCodeHash } from './hash';
 const OTP_COLLECTION = 'otp_requests';
 const RATE_LIMIT_COLLECTION = 'otp_rate_limits';
 
-export type OtpPurpose = 'auth' | 'link' | 'reset';
+// "auth" is login-or-signup; "signup" is the explicit create-only intent that is
+// rejected when the phone already has an account.
+export type OtpPurpose = 'auth' | 'signup' | 'link' | 'reset';
 
 export interface OtpRecord {
   phone_number: string;

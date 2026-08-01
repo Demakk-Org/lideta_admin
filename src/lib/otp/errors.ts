@@ -9,6 +9,9 @@ export type OtpErrorCode =
   | 'otp_expired'
   | 'too_many_attempts'
   | 'phone_in_use'
+  // Distinct from `phone_in_use` (link-time collision with a *different* account):
+  // this one means purpose:"signup" hit a number that already has an account.
+  | 'account_exists'
   | 'account_not_found'
   | 'no_password_account'
   | 'weak_password'

@@ -14,6 +14,7 @@ import { makeOtpLogger } from '@/lib/otp/log';
 import { normalizeLang, otpMessage } from '@/lib/otp/messages';
 import { isValidE164, toGeezSmsPhone } from '@/lib/otp/phone';
 import { checkAndRecordSend, createOtpRequest, type OtpPurpose } from '@/lib/otp/store';
+import { phoneAccountExists } from '@/lib/otp/users';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -46,7 +47,9 @@ export async function POST(req: NextRequest) {
 
   const phoneNumber = String(body.phoneNumber ?? '').trim();
   const purpose: OtpPurpose =
-    body.purpose === 'link' || body.purpose === 'reset' ? body.purpose : 'auth';
+    body.purpose === 'link' || body.purpose === 'reset' || body.purpose === 'signup'
+      ? body.purpose
+      : 'auth';
   const lang = normalizeLang(body.lang);
   const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null;
 
@@ -94,6 +97,29 @@ export async function POST(req: NextRequest) {
     });
   }
 
+  // purpose:"signup" is an explicit create-only intent: if the number already has an
+  // account, fail before any SMS is sent, any GeezSMS balance is spent, or any OTP
+  // record is written. Deliberately placed *after* checkAndRecordSend so a rejected
+  // signup still counts against the per-phone/per-IP quotas — otherwise this branch
+  // would be a free, unlimited "is this number registered?" oracle.
+  if (purpose === 'signup') {
+    let exists: boolean;
+    try {
+      exists = await phoneAccountExists(phoneNumber);
+    } catch (e) {
+      log.error('signup_lookup_failed', { phoneNumber, error: (e as Error).message });
+      return errorResponse(500, 'server_error', 'Failed to check phone number');
+    }
+    if (exists) {
+      log.warn('account_exists', { phoneNumber, purpose });
+      return errorResponse(
+        409,
+        'account_exists',
+        'An account already exists for this phone number.',
+      );
+    }
+  }
+
   // Generate + persist (hash only), superseding any outstanding code for this number.
   const code = generateCode(OTP_CONFIG.length);
   let requestId: string;
@@ -130,7 +156,8 @@ export async function POST(req: NextRequest) {
 
   log.info('otp_sent', { phoneNumber, requestId, purpose, lang });
 
-  // Privacy: always 200, regardless of whether an account exists for this number.
+  // Privacy: for "auth"/"reset"/"link", always 200 regardless of whether an account
+  // exists for this number. Only "signup" (handled above) reveals existence.
   return NextResponse.json({
     requestId,
     expiresInSeconds: OTP_CONFIG.ttlSeconds,

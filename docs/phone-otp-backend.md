@@ -28,14 +28,36 @@ x-otp-app-secret: <OTP_REQUEST_SECRET>
 ```jsonc
 {
   "phoneNumber": "+251922493805",  // E.164, required
-  "purpose": "auth",               // "auth" (default) | "link" | "reset"
+  "purpose": "auth",               // "auth" (default) | "signup" | "link" | "reset"
   "lang": "en",                    // "en" | "am" | "om" — SMS language, default "en"
   "idToken": "<firebase-id-token>" // required only when purpose == "link"
 }
 ```
 
 `200` → `{ "requestId", "expiresInSeconds": 300, "resendAfterSeconds": 60 }`
-(always 200 whether or not an account exists — never reveals account existence).
+
+**Privacy:** for `purpose` `"auth"` and `"reset"`, the response is always `200`
+whether or not an account exists — it never reveals account existence.
+
+**`"auth"` vs `"signup"`.** `"auth"` is login-or-signup: if the number already has
+an account, verifying signs it in; if not, the account is created. That is right for a
+login screen but wrong for a signup screen, where the user would be silently logged
+into an existing account. `"signup"` is the explicit create-only intent:
+
+| purpose | Account exists for phone | Account does NOT exist |
+|---|---|---|
+| `auth` | sign in | create + sign in |
+| `signup` | **`409 account_exists`** | create + sign in |
+| `link` | see `phone_in_use` | attach phone to the signed-in account |
+| `reset` | send reset code | send reset code |
+
+The privacy rule above is intentionally relaxed for `"signup"` only: a signup form has
+to tell the user their number is taken, and the same fact is obtainable by simply
+attempting a login. To limit the enumeration this opens up, a rejected `signup`
+request is rate-limited exactly like a successful one — the per-phone and per-IP
+counters are recorded **before** the existence check, so a `409` costs the caller the
+same quota as a `200` and the endpoint can't be used as a fast "is this number
+registered?" oracle.
 
 ### `POST /otp/verify`
 
@@ -105,9 +127,20 @@ All non-2xx: `{ "error": { "code", "message" } }`. The app switches on `code`
 `resendAfterSeconds`.
 
 Codes: `invalid_phone`, `rate_limited`, `otp_invalid`, `otp_expired`,
-`too_many_attempts`, `phone_in_use`, `account_not_found`, `no_password_account`,
-`weak_password`, `sms_send_failed`, `unauthorized`, `invalid_request`,
-`server_error`.
+`too_many_attempts`, `phone_in_use`, `account_exists`, `account_not_found`,
+`no_password_account`, `weak_password`, `sms_send_failed`, `unauthorized`,
+`invalid_request`, `server_error`.
+
+`account_exists` and `phone_in_use` are **not** interchangeable: `phone_in_use` is a
+link-time collision with a *different* account, `account_exists` is a signup against a
+number that already has one.
+
+#### Status matrix (signup)
+
+| Endpoint | HTTP | `error.code` | When |
+|---|---|---|---|
+| `/otp/request` | `409` | `account_exists` | `purpose:"signup"` and the phone already has an account. No SMS sent, no OTP record written; rate-limit counters still increment. |
+| `/otp/verify` | `409` | `account_exists` | `purpose:"signup"` and an account for the phone appeared between request and verify. The code is consumed. |
 
 ## GeezSMS
 
@@ -138,7 +171,8 @@ body: token, phone, msg  [, shortcode_id]
 ## Firestore
 
 - **`otp_requests/{requestId}`** — one doc per code: `phone_number`, `code_hash`
-  (HMAC-SHA256, plaintext never stored/logged), `purpose`, `link_uid`, `lang`, `attempts`,
+  (HMAC-SHA256, plaintext never stored/logged), `purpose`
+  (`"auth" | "signup" | "link" | "reset"`), `link_uid`, `lang`, `attempts`,
   `send_count`, `ip`, `created_at`, `expires_at`, `consumed_at`. Expiry (5 min),
   the 5-attempt cap, single-use, and latest-wins are enforced in code. `lang` (the language
   the OTP was requested in) is echoed back in the `/otp/verify` response so the app can set
