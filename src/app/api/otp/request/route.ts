@@ -139,22 +139,40 @@ export async function POST(req: NextRequest) {
   log.info('otp_stored', { phoneNumber, requestId, purpose });
 
   // Deliver via GeezSMS.
+  const geezPhone = toGeezSmsPhone(phoneNumber, OTP_CONFIG.stripPlus);
+  let sms;
   try {
-    const geezPhone = toGeezSmsPhone(phoneNumber, OTP_CONFIG.stripPlus);
-    await sendSmsWithRetry(geezPhone, otpMessage(code, lang));
+    sms = await sendSmsWithRetry(geezPhone, otpMessage(code, lang), code);
   } catch (e) {
     const transient = e instanceof SmsSendError && e.transient;
     log.error('sms_send_failed', {
       phoneNumber,
+      geezPhone,
       requestId,
       transient,
       httpStatus: transient ? 503 : 502,
       error: (e as Error).message,
+      // Redacted GeezSMS body — the actual rejection reason (bad number,
+      // insufficient balance, unrecognized request, …).
+      geezResponse: e instanceof SmsSendError ? e.responseBody : null,
     });
     return errorResponse(transient ? 503 : 502, 'sms_send_failed', 'Failed to send SMS');
   }
 
-  log.info('otp_sent', { phoneNumber, requestId, purpose, lang });
+  // `geezMessageId` is the dashboard's ID column — the only way to match one of our
+  // requests to a row there. NB: this line means GeezSMS *accepted* the message, not
+  // that it was delivered; the dashboard can still flip it to Failed afterwards, and
+  // we get no callback for that.
+  log.info('otp_sent', {
+    phoneNumber,
+    geezPhone,
+    requestId,
+    purpose,
+    lang,
+    geezMessageId: sms.messageId,
+    geezAttempts: sms.attempts,
+    geezResponse: sms.responseBody,
+  });
 
   // Privacy: for "auth"/"reset"/"link", always 200 regardless of whether an account
   // exists for this number. Only "signup" (handled above) reveals existence.
