@@ -13,6 +13,9 @@ export type OtpErrorCode =
   // this one means purpose:"signup" hit a number that already has an account.
   | 'account_exists'
   | 'account_not_found'
+  // /email/set: the address is already on a different account.
+  | 'email_in_use'
+  | 'invalid_email'
   | 'no_password_account'
   | 'weak_password'
   | 'sms_send_failed'

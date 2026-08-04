@@ -13,8 +13,12 @@ import { generateCode, hashCode } from '@/lib/otp/hash';
 import { makeOtpLogger } from '@/lib/otp/log';
 import { normalizeLang, otpMessage } from '@/lib/otp/messages';
 import { isValidE164, toGeezSmsPhone } from '@/lib/otp/phone';
-import { checkAndRecordSend, createOtpRequest, type OtpPurpose } from '@/lib/otp/store';
-import { phoneAccountExists } from '@/lib/otp/users';
+import {
+  checkAndRecordSend,
+  createOtpRequest,
+  type OtpPurpose,
+} from '@/lib/otp/store';
+import { phoneAccountExists, phoneOwnerUid } from '@/lib/otp/users';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -25,7 +29,10 @@ export async function POST(req: NextRequest) {
   const missing = missingCoreConfig();
   if (missing.length || !GEEZSMS_CONFIG.token) {
     log.error('config_missing', {
-      missing: [...missing, ...(GEEZSMS_CONFIG.token ? [] : ['GEEZ_SMS_TOKEN'])],
+      missing: [
+        ...missing,
+        ...(GEEZSMS_CONFIG.token ? [] : ['GEEZ_SMS_TOKEN']),
+      ],
     });
     return errorResponse(500, 'server_error', 'OTP backend is not configured');
   }
@@ -33,7 +40,9 @@ export async function POST(req: NextRequest) {
   // Shared secret (stand-in for Firebase App Check).
   const appSecret = req.headers.get('x-otp-app-secret');
   if (!appSecret || appSecret !== OTP_REQUEST_SECRET) {
-    log.warn('unauthorized', { reason: appSecret ? 'wrong_secret' : 'missing_secret' });
+    log.warn('unauthorized', {
+      reason: appSecret ? 'wrong_secret' : 'missing_secret',
+    });
     return errorResponse(401, 'unauthorized', 'Missing or invalid app secret');
   }
 
@@ -47,7 +56,9 @@ export async function POST(req: NextRequest) {
 
   const phoneNumber = String(body.phoneNumber ?? '').trim();
   const purpose: OtpPurpose =
-    body.purpose === 'link' || body.purpose === 'reset' || body.purpose === 'signup'
+    body.purpose === 'link' ||
+    body.purpose === 'reset' ||
+    body.purpose === 'signup'
       ? body.purpose
       : 'auth';
   const lang = normalizeLang(body.lang);
@@ -63,7 +74,11 @@ export async function POST(req: NextRequest) {
 
   if (!isValidE164(phoneNumber)) {
     log.warn('invalid_phone', { phoneNumber });
-    return errorResponse(400, 'invalid_phone', 'phoneNumber must be E.164 (e.g. +2519…)');
+    return errorResponse(
+      400,
+      'invalid_phone',
+      'phoneNumber must be E.164 (e.g. +2519…)',
+    );
   }
 
   // purpose:"link" attaches the phone to an already-signed-in account.
@@ -72,20 +87,31 @@ export async function POST(req: NextRequest) {
     const idToken = String(body.idToken ?? '');
     if (!idToken) {
       log.warn('link_idtoken_missing', { phoneNumber });
-      return errorResponse(401, 'unauthorized', 'idToken is required for purpose "link"');
+      return errorResponse(
+        401,
+        'unauthorized',
+        'idToken is required for purpose "link"',
+      );
     }
     try {
       linkUid = (await adminAuth.verifyIdToken(idToken)).uid;
       log.info('link_idtoken_ok', { phoneNumber, uid: linkUid });
     } catch (e) {
-      log.warn('link_idtoken_invalid', { phoneNumber, error: (e as Error).message });
+      log.warn('link_idtoken_invalid', {
+        phoneNumber,
+        error: (e as Error).message,
+      });
       return errorResponse(401, 'unauthorized', 'Invalid idToken');
     }
   }
 
   // Rate limiting: resend cooldown + hourly caps (per-number and per-IP).
   // Reset requests are tracked in their own buckets, separate from auth (§17.1).
-  const rl = await checkAndRecordSend(phoneNumber, ip, purpose === 'reset' ? 'reset' : 'auth');
+  const rl = await checkAndRecordSend(
+    phoneNumber,
+    ip,
+    purpose === 'reset' ? 'reset' : 'auth',
+  );
   if (!rl.allowed) {
     log.warn('rate_limited', {
       phoneNumber,
@@ -93,7 +119,8 @@ export async function POST(req: NextRequest) {
       resendAfterSeconds: rl.resendAfterSeconds,
     });
     return errorResponse(429, 'rate_limited', `Rate limited (${rl.reason})`, {
-      resendAfterSeconds: rl.resendAfterSeconds ?? OTP_CONFIG.resendCooldownSeconds,
+      resendAfterSeconds:
+        rl.resendAfterSeconds ?? OTP_CONFIG.resendCooldownSeconds,
     });
   }
 
@@ -107,7 +134,10 @@ export async function POST(req: NextRequest) {
     try {
       exists = await phoneAccountExists(phoneNumber);
     } catch (e) {
-      log.error('signup_lookup_failed', { phoneNumber, error: (e as Error).message });
+      log.error('signup_lookup_failed', {
+        phoneNumber,
+        error: (e as Error).message,
+      });
       return errorResponse(500, 'server_error', 'Failed to check phone number');
     }
     if (exists) {
@@ -116,6 +146,28 @@ export async function POST(req: NextRequest) {
         409,
         'account_exists',
         'An account already exists for this phone number.',
+      );
+    }
+  }
+
+  if (purpose === 'link' && linkUid) {
+    let ownerUid: string | null;
+    try {
+      ownerUid = await phoneOwnerUid(phoneNumber);
+    } catch (e) {
+      log.error('link_lookup_failed', {
+        phoneNumber,
+        error: (e as Error).message,
+      });
+      return errorResponse(500, 'server_error', 'Failed to check phone number');
+    }
+    // Re-verifying your own number is allowed; only another owner is a clash.
+    if (ownerUid !== null && ownerUid !== linkUid) {
+      log.warn('phone_in_use', { phoneNumber, callerUid: linkUid, ownerUid });
+      return errorResponse(
+        409,
+        'phone_in_use',
+        'Phone number already in use by another account',
       );
     }
   }
@@ -133,7 +185,10 @@ export async function POST(req: NextRequest) {
       ip,
     });
   } catch (e) {
-    log.error('store_write_failed', { phoneNumber, error: (e as Error).message });
+    log.error('store_write_failed', {
+      phoneNumber,
+      error: (e as Error).message,
+    });
     return errorResponse(500, 'server_error', 'Failed to store OTP request');
   }
   log.info('otp_stored', { phoneNumber, requestId, purpose });
@@ -156,7 +211,11 @@ export async function POST(req: NextRequest) {
       // insufficient balance, unrecognized request, …).
       geezResponse: e instanceof SmsSendError ? e.responseBody : null,
     });
-    return errorResponse(transient ? 503 : 502, 'sms_send_failed', 'Failed to send SMS');
+    return errorResponse(
+      transient ? 503 : 502,
+      'sms_send_failed',
+      'Failed to send SMS',
+    );
   }
 
   // `geezMessageId` is the dashboard's ID column — the only way to match one of our
