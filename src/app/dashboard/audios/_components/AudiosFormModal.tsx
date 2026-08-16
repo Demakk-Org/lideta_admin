@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import AppModal from "@/components/ui/AppModal";
 import AppButton, { AppButtonVariant } from "@/components/ui/AppButton";
 import FileUploadButton from "@/components/ui/FileUploadButton";
+import LyricsEditor from "@/components/ui/LyricsEditor";
 import type { WithId, AudioDoc, AudioLyric } from "@/lib/api/audios";
 import { uploadAudioFile, uploadAudioThumbnail } from "@/lib/api/storage";
 
@@ -54,12 +55,6 @@ export default function AudiosFormModal({
   }, [initial, open]);
 
   const tags = useMemo(() => tagsInput.split(/,|\n/).map((t) => t.trim()).filter(Boolean), [tagsInput]);
-
-  const addLyric = () => setLyrics((p) => [...p, { text: "", time: "" }]);
-  const updateLyric = (idx: number, patch: Partial<AudioLyric>) => {
-    setLyrics((p) => p.map((it, i) => (i === idx ? { ...it, ...patch } : it)));
-  };
-  const removeLyric = (idx: number) => setLyrics((p) => p.filter((_, i) => i !== idx));
 
   const handleUploadThumb = async (file: File) => {
     const url = await uploadAudioThumbnail(file, title || audioBy || "audio");
@@ -148,30 +143,7 @@ export default function AudiosFormModal({
           </div>
         </div>
 
-        <div className="mt-4">
-          <div className="flex items-center justify-between">
-            <h4 className="font-medium text-primary-800">Lyrics</h4>
-            <AppButton type="button" variant={AppButtonVariant.Edit} onClick={addLyric}>Add line</AppButton>
-          </div>
-          <div className="mt-3 space-y-3">
-            {lyrics.map((l, idx) => (
-              <div key={idx} className="grid grid-cols-1 sm:grid-cols-12 gap-3">
-                <input className="app-input sm:col-span-7" placeholder="Text" value={l.text} onChange={(e) => updateLyric(idx, { text: e.target.value })} />
-                <input className="app-input sm:col-span-3" placeholder="mm:ss" value={l.time} onChange={(e) => updateLyric(idx, { time: e.target.value })} />
-                <div className="sm:col-span-2 flex sm:justify-end">
-                  <AppButton
-                    type="button"
-                    variant={AppButtonVariant.Delete}
-                    onClick={() => removeLyric(idx)}
-                    className="min-w-[110px] whitespace-nowrap"
-                  >
-                    Remove
-                  </AppButton>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+        <LyricsEditor value={lyrics} onChange={setLyrics} />
       </form>
     </AppModal>
   );

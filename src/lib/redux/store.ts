@@ -10,6 +10,7 @@ import newsReducer from './features/newsSlice';
 import eventsReducer from './features/eventsSlice';
 import eventCategoriesReducer from './features/eventCategoriesSlice';
 import audiosReducer from './features/audiosSlice';
+import videosReducer from './features/videosSlice';
 import groupsReducer from './features/groupsSlice';
 import usersReducer from './features/usersSlice';
 import todayParagraphsReducer from './features/todayParagraphsSlice';
@@ -41,6 +42,7 @@ export const store = configureStore({
     events: eventsReducer,
     eventCategories: eventCategoriesReducer,
     audios: audiosReducer,
+    videos: videosReducer,
     groups: groupsReducer,
     users: usersReducer,
     todayParagraphs: todayParagraphsReducer,

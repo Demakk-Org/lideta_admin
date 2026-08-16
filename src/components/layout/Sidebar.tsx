@@ -9,6 +9,7 @@ import {
   NewspaperIcon,
   CalendarDaysIcon,
   SpeakerWaveIcon,
+  VideoCameraIcon,
   DocumentTextIcon,
   QuestionMarkCircleIcon,
 } from '@heroicons/react/24/outline';
@@ -17,7 +18,6 @@ import { signOutUser } from '@/lib/api/auth';
 
 const navigation = [
   { name: 'Daily Bible Verse', href: '/dashboard/daily-verse', icon: BookOpenIcon },
-  { name: 'Today Bible Paragraphs', href: '/dashboard/today-paragraphs', icon: DocumentTextIcon },
   { name: 'Bibles', href: '/dashboard/bibles', icon: BookOpenIcon },
   { name: 'Books', href: '/dashboard/books', icon: BookOpenIcon },
   { name: 'Bible Studies', href: '/dashboard/bible-studies', icon: DocumentTextIcon },
@@ -29,6 +29,7 @@ const navigation = [
   { name: 'Quizzes', href: '/dashboard/quizzes', icon: QuestionMarkCircleIcon },
   { name: 'Quiz Categories', href: '/dashboard/quiz-categories', icon: QuestionMarkCircleIcon },
   { name: 'Audios', href: '/dashboard/audios', icon: SpeakerWaveIcon },
+  { name: 'Videos', href: '/dashboard/videos', icon: VideoCameraIcon },
   { name: 'Groups', href: '/dashboard/groups', icon: UserGroupIcon },
   { name: 'Users', href: '/dashboard/users', icon: UsersIcon },
 ];

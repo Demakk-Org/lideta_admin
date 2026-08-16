@@ -1,5 +1,5 @@
 import { storage } from '@/lib/firebase/config';
-import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
+import { deleteObject, getDownloadURL, ref, uploadBytes, uploadBytesResumable } from 'firebase/storage';
 
 function sanitizeSegment(s: string): string {
   return s
@@ -7,6 +7,31 @@ function sanitizeSegment(s: string): string {
     .trim()
     .replace(/\s+/g, '-')
     .replace(/[^a-z0-9-_]/g, '');
+}
+
+/** Receives upload completion as a 0-100 percentage. */
+export type UploadProgressHandler = (percent: number) => void;
+
+async function uploadWithProgress(
+  file: File,
+  path: string,
+  onProgress?: UploadProgressHandler
+): Promise<string> {
+  const metadata = { contentType: file.type || 'application/octet-stream' };
+  const task = uploadBytesResumable(ref(storage, path), file, metadata);
+  await new Promise<void>((resolve, reject) => {
+    task.on(
+      'state_changed',
+      (snap) => {
+        if (onProgress && snap.totalBytes > 0) {
+          onProgress(Math.round((snap.bytesTransferred / snap.totalBytes) * 100));
+        }
+      },
+      (err) => reject(err),
+      () => resolve()
+    );
+  });
+  return getDownloadURL(task.snapshot.ref);
 }
 
 export async function uploadAudioThumbnail(
@@ -48,6 +73,65 @@ export async function uploadAudioFile(
   } catch (err) {
     console.error('[storageApi] uploadAudioFile error', err);
     throw new Error('Failed to upload audio file');
+  }
+}
+
+export async function uploadVideoThumbnail(
+  file: File,
+  title: string,
+  onProgress?: UploadProgressHandler
+): Promise<string> {
+  console.log('[storageApi] uploadVideoThumbnail start', { name: file.name, size: file.size });
+  try {
+    const ts = Date.now();
+    const base = sanitizeSegment(title || 'untitled');
+    const path = `videos/thumbnails/${base}/${ts}-${file.name}`;
+    const url = await uploadWithProgress(file, path, onProgress);
+    console.log('[storageApi] uploadVideoThumbnail success', url);
+    return url;
+  } catch (err) {
+    console.error('[storageApi] uploadVideoThumbnail error', err);
+    throw new Error('Failed to upload video thumbnail');
+  }
+}
+
+export async function uploadVideoFile(
+  file: File,
+  title: string,
+  onProgress?: UploadProgressHandler
+): Promise<string> {
+  console.log('[storageApi] uploadVideoFile start', { name: file.name, size: file.size });
+  try {
+    const ts = Date.now();
+    const base = sanitizeSegment(title || 'untitled');
+    const path = `videos/files/${base}/${ts}-${file.name}`;
+    const url = await uploadWithProgress(file, path, onProgress);
+    console.log('[storageApi] uploadVideoFile success', url);
+    return url;
+  } catch (err) {
+    console.error('[storageApi] uploadVideoFile error', err);
+    throw new Error('Failed to upload video file');
+  }
+}
+
+/** True when the URL points at this project's Firebase Storage bucket. */
+export function isFirebaseStorageUrl(url: string): boolean {
+  return /^https:\/\/(firebasestorage\.googleapis\.com|[a-z0-9-]+\.firebasestorage\.app)\//i.test(url.trim());
+}
+
+/**
+ * Deletes a Storage object addressed by its download URL. Objects that are
+ * already gone (or that live outside our bucket) are treated as success.
+ */
+export async function deleteStorageFileByUrl(url: string): Promise<void> {
+  if (!url || !isFirebaseStorageUrl(url)) return;
+  try {
+    await deleteObject(ref(storage, url));
+  } catch (err) {
+    const code = (err as { code?: string })?.code;
+    if (code === 'storage/object-not-found') return;
+    console.error('[storageApi] deleteStorageFileByUrl error', err);
+    throw new Error('Failed to delete storage file');
   }
 }
 
