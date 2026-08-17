@@ -64,6 +64,8 @@ export type QuizDoc = {
   createdAt: string;
   kind: QuizKind;
   isPublished: boolean;
+  /** Daily quizzes only: whether the user must read the daily verse section first. */
+  requiresVerseRead: boolean;
 };
 
 export type WithId<T> = T & { id: string };
@@ -145,6 +147,8 @@ function mapDoc(id: string, data: Record<string, unknown>): WithId<QuizDoc> {
     createdAt: normalizeTimestamp(data.createdAt) ?? new Date().toISOString(),
     kind: coerceKind(data.kind),
     isPublished: data.isPublished === true,
+    // Matches the app: absent means required.
+    requiresVerseRead: data.requiresVerseRead !== false,
   };
 }
 
@@ -168,6 +172,7 @@ type WritePayload = {
   dificultyLevel: DifficultyLevel;
   kind: QuizKind;
   createdAt: Date | string;
+  requiresVerseRead: boolean;
 };
 
 function sanitizeWrite(data: WritePayload) {
@@ -186,6 +191,8 @@ function sanitizeWrite(data: WritePayload) {
     kind: data.kind,
     createdAt: Timestamp.fromDate(isNaN(created.getTime()) ? new Date() : created),
     isPublished: false,
+    // The daily verse gate only applies to daily quizzes.
+    requiresVerseRead: data.kind === QuizKind.Daily ? data.requiresVerseRead : false,
   };
 }
 
@@ -197,7 +204,10 @@ function validateCreate(data: WritePayload) {
   }
 }
 
-export type CreateStandardQuizInput = Omit<WritePayload, 'kind' | 'createdAt' | 'categoryId'> & {
+export type CreateStandardQuizInput = Omit<
+  WritePayload,
+  'kind' | 'createdAt' | 'categoryId' | 'requiresVerseRead'
+> & {
   categoryId: string;
   createdAt?: Date;
 };
@@ -207,6 +217,7 @@ export async function addStandardQuiz(input: CreateStandardQuizInput): Promise<s
     ...input,
     kind: QuizKind.Standard,
     createdAt: input.createdAt ?? new Date(),
+    requiresVerseRead: false,
   };
   validateCreate(payload);
   try {
@@ -219,8 +230,13 @@ export async function addStandardQuiz(input: CreateStandardQuizInput): Promise<s
   }
 }
 
-export type CreateDailyQuizInput = Omit<WritePayload, 'kind' | 'createdAt' | 'categoryId'> & {
+export type CreateDailyQuizInput = Omit<
+  WritePayload,
+  'kind' | 'createdAt' | 'categoryId' | 'requiresVerseRead'
+> & {
   date: Date;
+  /** Defaults to true: the daily verse section must be read before taking the quiz. */
+  requiresVerseRead?: boolean;
 };
 
 export async function addDailyQuiz(input: CreateDailyQuizInput): Promise<string> {
@@ -233,6 +249,7 @@ export async function addDailyQuiz(input: CreateDailyQuizInput): Promise<string>
     dificultyLevel: input.dificultyLevel,
     kind: QuizKind.Daily,
     createdAt: input.date,
+    requiresVerseRead: input.requiresVerseRead !== false,
   };
   validateCreate(payload);
   try {
@@ -251,7 +268,10 @@ export async function addDailyQuiz(input: CreateDailyQuizInput): Promise<string>
   }
 }
 
-export type CreateStudyQuizInput = Omit<WritePayload, 'kind' | 'createdAt' | 'categoryId'> & {
+export type CreateStudyQuizInput = Omit<
+  WritePayload,
+  'kind' | 'createdAt' | 'categoryId' | 'requiresVerseRead'
+> & {
   studyId: string;
 };
 
@@ -267,6 +287,7 @@ export async function addStudyQuiz(input: CreateStudyQuizInput): Promise<string>
     dificultyLevel: input.dificultyLevel,
     kind: QuizKind.Study,
     createdAt: new Date(),
+    requiresVerseRead: false,
   };
   validateCreate(payload);
   try {
@@ -292,6 +313,8 @@ export type UpdateQuizInput = {
   ageGroup: AgeGroup;
   dificultyLevel: DifficultyLevel;
   kind: QuizKind;
+  /** Only honoured for daily quizzes; other kinds are always stored as false. */
+  requiresVerseRead?: boolean;
 };
 
 export async function updateQuiz(id: string, data: UpdateQuizInput): Promise<void> {
@@ -309,6 +332,8 @@ export async function updateQuiz(id: string, data: UpdateQuizInput): Promise<voi
       categoryId: data.kind === QuizKind.Standard ? trimmedCategory : '',
       ageGroup: data.ageGroup,
       dificultyLevel: data.dificultyLevel,
+      requiresVerseRead:
+        data.kind === QuizKind.Daily ? data.requiresVerseRead !== false : false,
     });
   } catch (err) {
     console.error('[quizzesApi] updateQuiz error', err);

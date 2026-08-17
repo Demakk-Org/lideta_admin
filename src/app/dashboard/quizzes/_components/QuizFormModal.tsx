@@ -78,6 +78,7 @@ export default function QuizFormModal({
   );
   const [dailyDate, setDailyDate] = useState<string>(todayDateInputValue());
   const [studyId, setStudyId] = useState<string>("");
+  const [requiresVerseRead, setRequiresVerseRead] = useState(true);
 
   useEffect(() => {
     if (!open) return;
@@ -89,6 +90,7 @@ export default function QuizFormModal({
     setDificultyLevel(initial?.dificultyLevel ?? DifficultyLevel.Any);
     setDailyDate(todayDateInputValue());
     setStudyId("");
+    setRequiresVerseRead(initial?.requiresVerseRead ?? true);
   }, [open, initial]);
 
   useEffect(() => {
@@ -156,6 +158,7 @@ export default function QuizFormModal({
           ageGroup,
           dificultyLevel,
           kind,
+          requiresVerseRead,
         });
         return;
       }
@@ -187,6 +190,7 @@ export default function QuizFormModal({
           ageGroup,
           dificultyLevel,
           date,
+          requiresVerseRead,
         });
         return;
       }
@@ -336,6 +340,29 @@ export default function QuizFormModal({
                 disabled
                 className="mt-1 block w-full rounded-md border border-primary-200 bg-primary-50 px-3 py-2 text-primary-700"
               />
+            </div>
+          )}
+
+          {isDaily && (
+            <div className="sm:col-span-2">
+              <label className="flex items-start gap-2">
+                <input
+                  type="checkbox"
+                  checked={requiresVerseRead}
+                  onChange={(e) => setRequiresVerseRead(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-primary-300 text-primary-600 focus:ring-primary-500"
+                />
+                <span>
+                  <span className="block text-sm font-medium text-primary-800">
+                    Is reading daily verse section required?
+                  </span>
+                  <span className="block text-xs text-primary-600">
+                    Leave on when the quiz is based on today&apos;s verse. Turn it
+                    off if the quiz is unrelated, so users can take it without
+                    reading the verse section first.
+                  </span>
+                </span>
+              </label>
             </div>
           )}
 

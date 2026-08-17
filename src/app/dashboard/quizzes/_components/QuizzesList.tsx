@@ -90,6 +90,11 @@ export default function QuizzesList({
             <span className="inline-block rounded bg-primary-50 px-2 py-0.5 text-primary-700">
               Difficulty: {DIFFICULTY_LEVEL_LABELS[it.dificultyLevel]}
             </span>
+            {it.kind === QuizKind.Daily && (
+              <span className="inline-block rounded bg-primary-50 px-2 py-0.5 text-primary-700">
+                Verse read: {it.requiresVerseRead ? "Required" : "Not required"}
+              </span>
+            )}
           </div>
           <p className="mt-2 text-xs text-primary-600">
             Created: {formatDate(it.createdAt)}
