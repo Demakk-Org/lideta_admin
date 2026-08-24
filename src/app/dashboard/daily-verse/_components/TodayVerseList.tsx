@@ -1,7 +1,10 @@
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
 import { WithId, DailyVerse, VerseCoord } from "@/lib/api/dailyVerse";
 import AppButton, { AppButtonVariant } from "@/components/ui/AppButton";
+import NotifyButton from "@/components/ui/NotifyButton";
+import Pagination from "@/components/ui/Pagination";
 import { listBibleBooksAmharic } from "@/lib/api/books";
 
 const bookName = (index: number) =>
@@ -21,16 +24,49 @@ const sectionLabel = (section: DailyVerse["section"]) => {
 type Props = {
   items: WithId<DailyVerse>[];
   loading: boolean;
+  notifying?: boolean;
   onEdit: (v: WithId<DailyVerse>) => void;
   onDelete: (id: string) => void;
+  onNotify?: (v: WithId<DailyVerse>) => void;
+  onAdd?: () => void;
 };
 
-export default function TodayVerseList({ items, loading, onEdit, onDelete }: Props) {
+export default function TodayVerseList({
+  items,
+  loading,
+  notifying,
+  onEdit,
+  onDelete,
+  onNotify,
+  onAdd,
+}: Props) {
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
+
+  // Keep the page in range when the list shrinks or the page size changes.
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
+
+  const pageItems = useMemo(
+    () => items.slice((page - 1) * pageSize, page * pageSize),
+    [items, page, pageSize]
+  );
+
   return (
     <div className="rounded-md border border-primary-100 bg-white/60 backdrop-blur">
       <div className="px-4 py-2 border-b border-primary-100 flex items-center justify-between">
         <h2 className="text-primary-800 font-semibold">Saved Verses</h2>
-        {loading && <span className="text-sm text-primary-600">Loading...</span>}
+        <div className="flex items-center gap-3">
+          {loading && <span className="text-sm text-primary-600">Loading...</span>}
+          {onAdd && (
+            <AppButton variant={AppButtonVariant.Add} onClick={onAdd} className="px-3 py-1">
+              Add Verse
+            </AppButton>
+          )}
+        </div>
       </div>
       <div className="overflow-x-auto">
         <table className="min-w-full divide-y divide-primary-100">
@@ -46,7 +82,7 @@ export default function TodayVerseList({ items, loading, onEdit, onDelete }: Pro
             </tr>
           </thead>
           <tbody className="divide-y divide-primary-100">
-            {items.map((v) => (
+            {pageItems.map((v) => (
               <tr key={v.id} className="bg-white/60">
                 <td className="px-4 py-2 text-sm text-primary-800 whitespace-nowrap">{`${v.display_date?.year}-${String(v.display_date?.month).padStart(2, "0")}-${String(v.display_date?.day).padStart(2, "0")}`}</td>
                 <td className="px-4 py-2 text-sm text-primary-800 whitespace-nowrap">{v.reference}</td>
@@ -66,6 +102,13 @@ export default function TodayVerseList({ items, loading, onEdit, onDelete }: Pro
                     <AppButton variant={AppButtonVariant.Delete} onClick={() => onDelete(v.id)} className="px-3 py-1">
                       Delete
                     </AppButton>
+                    {onNotify && (
+                      <NotifyButton
+                        onClick={() => onNotify(v)}
+                        disabled={loading || notifying}
+                        className="px-3 py-1"
+                      />
+                    )}
                   </div>
                 </td>
               </tr>
@@ -78,6 +121,19 @@ export default function TodayVerseList({ items, loading, onEdit, onDelete }: Pro
           </tbody>
         </table>
       </div>
+
+      {items.length > 0 && (
+        <Pagination
+          page={page}
+          pageSize={pageSize}
+          total={items.length}
+          onPageChange={setPage}
+          onPageSizeChange={(size) => {
+            setPageSize(size);
+            setPage(1);
+          }}
+        />
+      )}
     </div>
   );
 }

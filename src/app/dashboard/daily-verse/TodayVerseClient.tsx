@@ -8,6 +8,7 @@ import { useAppDispatch, useAppSelector } from "@/lib/redux/store";
 import TodayVerseHeader from "./_components/TodayVerseHeader";
 import TodayVerseModal from "./_components/TodayVerseModal";
 import TodayVerseList from "./_components/TodayVerseList";
+import TodayVerseCalendar, { EthiopianDate } from "./_components/TodayVerseCalendar";
 import type { VerseForm } from "./_components/types";
 import { toEthiopian, toGregorian } from "ethiopian-date";
 import { isEthiopianLeapYear, listBibleBooksAmharic } from "@/lib/api/books";
@@ -19,6 +20,7 @@ import {
   editDailyVerse,
   removeDailyVerse,
 } from "@/lib/redux/features/dailyVerseSlice";
+import { useContentNotification } from "@/lib/notifications/useContentNotification";
 
 const emptyForm: VerseForm = {
   book: "",
@@ -44,12 +46,14 @@ export default function TodayVerseClient() {
   const dispatch = useAppDispatch();
   const { items, status } = useAppSelector((s) => s.dailyVerse);
   const loading = status === "loading";
+  const { notifying, notify } = useContentNotification();
   const [submitting, setSubmitting] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<VerseForm>(emptyForm);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [view, setView] = useState<"calendar" | "list">("calendar");
 
 
   const load = useCallback(async () => {
@@ -69,17 +73,22 @@ export default function TodayVerseClient() {
     setForm(emptyForm);
   };
 
-  const openNew = () => {
+  /** Opens the Add form, prefilled with `ec` when given, otherwise today (EC). */
+  const openNew = (ec?: EthiopianDate) => {
     setEditingId(null); // ensure Add mode
-    // Prefill with today's Ethiopian date
     try {
-      const now = new Date();
-      const [ey, em, ed] = toEthiopian(
-        now.getFullYear(),
-        now.getMonth() + 1,
-        now.getDate()
-      );
-      setForm({ ...emptyForm, year: String(ey), month: String(em), day: String(ed) });
+      let year = ec?.year;
+      let month = ec?.month;
+      let day = ec?.day;
+      if (!ec) {
+        const now = new Date();
+        [year, month, day] = toEthiopian(
+          now.getFullYear(),
+          now.getMonth() + 1,
+          now.getDate()
+        );
+      }
+      setForm({ ...emptyForm, year: String(year), month: String(month), day: String(day) });
     } catch {
       reset();
     }
@@ -232,7 +241,7 @@ export default function TodayVerseClient() {
 
   return (
     <div className="space-y-6">
-      <TodayVerseHeader onAdd={openNew} />
+      <TodayVerseHeader view={view} onViewChange={setView} />
 
       <TodayVerseModal
         isOpen={isModalOpen}
@@ -245,7 +254,31 @@ export default function TodayVerseClient() {
         onClose={closeModal}
       />
 
-      <TodayVerseList items={items} loading={loading} onEdit={handleEdit} onDelete={handleDelete} />
+      {view === "calendar" ? (
+        <TodayVerseCalendar
+          items={items}
+          loading={loading}
+          notifying={notifying}
+          onEdit={handleEdit}
+          onDelete={handleDelete}
+          onNotify={(v) =>
+            notify({ type: "daily_verse", id: v.id, title: v.reference })
+          }
+          onAddForDate={openNew}
+        />
+      ) : (
+        <TodayVerseList
+          items={items}
+          loading={loading}
+          notifying={notifying}
+          onEdit={handleEdit}
+          onDelete={handleDelete}
+          onNotify={(v) =>
+            notify({ type: "daily_verse", id: v.id, title: v.reference })
+          }
+          onAdd={() => openNew()}
+        />
+      )}
 
       <ConfirmDeleteModal
         open={isDeleteOpen}
