@@ -1,6 +1,8 @@
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
 import AppButton, { AppButtonVariant } from "@/components/ui/AppButton";
+import Pagination from "@/components/ui/Pagination";
 import type { WithId, UserDoc } from "@/lib/api/users";
 import { UserRole } from "@/lib/api/users";
 
@@ -13,50 +15,103 @@ export default function UsersList({
   loading: boolean;
   onEdit: (it: WithId<UserDoc>) => void;
 }) {
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
+
+  // Keep the page in range when the list shrinks or the page size changes.
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
+
+  const pageItems = useMemo(
+    () => items.slice((page - 1) * pageSize, page * pageSize),
+    [items, page, pageSize]
+  );
+
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 items-start">
-      {items.map((it) => (
-        <div key={it.id} className="rounded-md border border-primary-200 bg-white p-4 shadow-sm">
-          <div className="flex items-start gap-3">
-            {it.imageUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={it.imageUrl} alt={it.name} className="h-10 w-10 rounded object-cover border" />
-            ) : (
-              <div className="h-10 w-10 rounded border bg-primary-50 flex items-center justify-center text-primary-600 text-sm">
-                {it.name?.[0]?.toUpperCase() || "U"}
-              </div>
+    <div className="rounded-md border border-primary-100 bg-white/60 backdrop-blur">
+      <div className="overflow-x-auto">
+        <table className="min-w-full divide-y divide-primary-100">
+          <thead className="bg-primary-50">
+            <tr>
+              <th className="px-4 py-2 text-left text-xs font-semibold text-primary-700">User</th>
+              <th className="px-4 py-2 text-left text-xs font-semibold text-primary-700">Email</th>
+              <th className="px-4 py-2 text-left text-xs font-semibold text-primary-700">Age</th>
+              <th className="px-4 py-2 text-left text-xs font-semibold text-primary-700">Role</th>
+              <th className="px-4 py-2 text-left text-xs font-semibold text-primary-700">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-primary-100">
+            {pageItems.map((it) => (
+              <tr key={it.id} className="bg-white/60">
+                <td className="px-4 py-2 text-sm text-primary-900 whitespace-nowrap">
+                  <div className="flex items-center gap-3">
+                    {it.imageUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={it.imageUrl}
+                        alt={it.name}
+                        className="h-8 w-8 rounded object-cover border"
+                      />
+                    ) : (
+                      <div className="h-8 w-8 rounded border bg-primary-50 flex items-center justify-center text-primary-600 text-xs">
+                        {it.name?.[0]?.toUpperCase() || "U"}
+                      </div>
+                    )}
+                    <span className="font-medium">{it.name || "-"}</span>
+                  </div>
+                </td>
+                <td className="px-4 py-2 text-sm text-primary-700">{it.email || "-"}</td>
+                <td className="px-4 py-2 text-sm text-primary-700 whitespace-nowrap">
+                  {typeof it.age === "number" ? it.age : "-"}
+                </td>
+                <td className="px-4 py-2 text-sm">
+                  <span
+                    className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                      it.role === UserRole.Admin
+                        ? "bg-primary-100 text-primary-800"
+                        : "bg-gray-100 text-gray-600"
+                    }`}
+                  >
+                    {it.role === UserRole.Admin ? "Admin" : "User"}
+                  </span>
+                </td>
+                <td className="px-4 py-2 text-sm">
+                  <AppButton
+                    variant={AppButtonVariant.Edit}
+                    className="px-3 py-1 text-xs"
+                    onClick={() => onEdit(it)}
+                    disabled={loading}
+                  >
+                    Edit
+                  </AppButton>
+                </td>
+              </tr>
+            ))}
+            {items.length === 0 && (
+              <tr>
+                <td colSpan={5} className="px-4 py-6 text-center text-sm text-primary-700">
+                  {loading ? "Loading..." : "No users found."}
+                </td>
+              </tr>
             )}
-            <div>
-              <h3 className="text-base font-semibold text-primary-900">{it.name}</h3>
-              <p className="text-xs text-primary-600">{it.email}</p>
-              {it.role === UserRole.Admin ? (
-                <span className="mt-1 inline-block rounded bg-primary-100 px-2 py-0.5 text-[11px] text-primary-700">
-                  Admin
-                </span>
-              ) : (
-                <span className="mt-1 inline-block rounded bg-gray-100 px-2 py-0.5 text-[11px] text-gray-600">
-                  User
-                </span>
-              )}
-            </div>
-          </div>
-          {typeof it.age === "number" && (
-            <p className="mt-2 text-sm text-primary-800">Age: {it.age}</p>
-          )}
-          <div className="mt-4 flex justify-end gap-2">
-            <AppButton
-              variant={AppButtonVariant.Edit}
-              className="px-3 py-1 text-xs"
-              onClick={() => onEdit(it)}
-              disabled={loading}
-            >
-              Edit
-            </AppButton>
-          </div>
-        </div>
-      ))}
-      {items.length === 0 && (
-        <div className="col-span-full text-center text-primary-600 py-8">No users found.</div>
+          </tbody>
+        </table>
+      </div>
+
+      {items.length > 0 && (
+        <Pagination
+          page={page}
+          pageSize={pageSize}
+          total={items.length}
+          onPageChange={setPage}
+          onPageSizeChange={(n) => {
+            setPageSize(n);
+            setPage(1);
+          }}
+        />
       )}
     </div>
   );

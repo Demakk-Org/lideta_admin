@@ -10,12 +10,14 @@ import type { WithId, NewsDoc } from "@/lib/api/news";
 import NewsList from "./_components/NewsList";
 import NewsFormModal from "./_components/NewsFormModal";
 import ConfirmDeleteModal from "@/components/ui/ConfirmDeleteModal";
+import { useContentNotification } from "@/lib/notifications/useContentNotification";
 
 export default function NewsClient() {
   const dispatch = useAppDispatch();
   const { items, status } = useAppSelector((s) => s.news);
   const users = useAppSelector((s) => s.users.items);
   const loading = status === "loading";
+  const { notifying, notify } = useContentNotification();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalType, setModalType] = useState<"add" | "edit">("add");
@@ -23,6 +25,10 @@ export default function NewsClient() {
 
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [isBatchDeleteOpen, setIsBatchDeleteOpen] = useState(false);
+  const [batchDeleting, setBatchDeleting] = useState(false);
 
   useEffect(() => {
     dispatch(fetchNews());
@@ -35,6 +41,15 @@ export default function NewsClient() {
       document.body.style.overflow = "";
     }
   }, []);
+
+  // Drop selections for items that no longer exist (e.g. after deletion)
+  useEffect(() => {
+    setSelectedIds((prev) => {
+      const existing = new Set(items.map((it) => it.id));
+      const next = prev.filter((id) => existing.has(id));
+      return next.length === prev.length ? prev : next;
+    });
+  }, [items]);
 
   const openAdd = () => {
     setModalType("add");
@@ -81,16 +96,77 @@ export default function NewsClient() {
     }
   };
 
+  const toggleSelect = (id: string) =>
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+
+  const allSelected = items.length > 0 && selectedIds.length === items.length;
+
+  const toggleSelectAll = () => setSelectedIds(allSelected ? [] : items.map((it) => it.id));
+
+  const confirmBatchDelete = async () => {
+    if (selectedIds.length === 0) return;
+    setBatchDeleting(true);
+    const results = await Promise.allSettled(
+      selectedIds.map((id) => dispatch(removeNews(id)).unwrap())
+    );
+    const failed = results.filter((r) => r.status === "rejected").length;
+    const succeeded = results.length - failed;
+    if (succeeded > 0) toast.success(`${succeeded} news deleted`);
+    if (failed > 0) toast.error(`${failed} failed to delete`);
+    setBatchDeleting(false);
+    setIsBatchDeleteOpen(false);
+    setSelectedIds([]);
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-xl font-semibold text-primary-800">News</h2>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          {items.length > 0 && (
+            <>
+              <label className="flex items-center gap-2 text-sm text-primary-700">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-primary-300 accent-red-600"
+                  checked={allSelected}
+                  onChange={toggleSelectAll}
+                />
+                <span>Select all</span>
+              </label>
+              {selectedIds.length > 0 && (
+                <AppButton
+                  variant={AppButtonVariant.Delete}
+                  className="px-3 py-1 text-xs"
+                  onClick={() => setIsBatchDeleteOpen(true)}
+                  disabled={batchDeleting}
+                >
+                  Delete Selected ({selectedIds.length})
+                </AppButton>
+              )}
+            </>
+          )}
           <AppButton variant={AppButtonVariant.Add} onClick={openAdd} disabled={loading}>Add News</AppButton>
         </div>
       </div>
 
-      <NewsList items={items} users={users} onEdit={openEdit} onDelete={onDelete} />
+      <NewsList
+        items={items}
+        users={users}
+        notifying={notifying}
+        onEdit={openEdit}
+        onDelete={onDelete}
+        onNotify={(it) =>
+          notify({
+            type: "news",
+            id: it.id,
+            title: it.title,
+            imageUrl: it.imageUrl,
+          })
+        }
+        selectedIds={selectedIds}
+        onToggleSelect={toggleSelect}
+      />
 
       <NewsFormModal
         open={isModalOpen}
@@ -110,6 +186,16 @@ export default function NewsClient() {
         }}
         onConfirm={confirmDelete}
         confirmLabel="Delete"
+      />
+
+      {/* Batch Delete Modal */}
+      <ConfirmDeleteModal
+        open={isBatchDeleteOpen}
+        title={`Delete ${selectedIds.length} selected news item${selectedIds.length === 1 ? "" : "s"}?`}
+        onCancel={() => setIsBatchDeleteOpen(false)}
+        onConfirm={confirmBatchDelete}
+        confirmLabel={batchDeleting ? "Deleting..." : "Delete All"}
+        disabled={batchDeleting}
       />
     </div>
   );

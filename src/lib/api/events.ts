@@ -1,5 +1,16 @@
 import { db } from '@/lib/firebase/config';
-import { Timestamp, addDoc, collection, deleteDoc, doc, getDocs, query, updateDoc } from 'firebase/firestore';
+import { bibleVerseFields } from '@/lib/api/quoteVerse';
+import type { BibleVerseFields } from '@/lib/api/quoteVerse';
+import {
+  Timestamp,
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  getDocs,
+  query,
+  updateDoc,
+} from 'firebase/firestore';
 
 export enum EventDescriptionType {
   Title = 'title',
@@ -9,7 +20,10 @@ export enum EventDescriptionType {
   List = 'list',
 }
 
-export type QuoteValue = { text: string; ref?: string };
+export type QuoteValue = {
+  text: string;
+  ref?: string;
+} & BibleVerseFields;
 
 // Discriminated union for description blocks
 export type EventDescriptionItem =
@@ -43,10 +57,15 @@ function normalizeTimestamp(val: unknown): string | undefined {
   try {
     if (!val) return undefined;
     if (val instanceof Timestamp) return val.toDate().toISOString();
-    if (typeof val === 'object' && val !== null && 'seconds' in val && 'nanoseconds' in val) {
+    if (
+      typeof val === 'object' &&
+      val !== null &&
+      'seconds' in val &&
+      'nanoseconds' in val
+    ) {
       const t = new Timestamp(
         (val as { seconds: number; nanoseconds: number }).seconds,
-        (val as { seconds: number; nanoseconds: number }).nanoseconds
+        (val as { seconds: number; nanoseconds: number }).nanoseconds,
       );
       return t.toDate().toISOString();
     }
@@ -95,7 +114,11 @@ function toTimestampValue(val: unknown): Timestamp | undefined {
 
 function toArrayOfStrings(input: unknown): string[] {
   if (Array.isArray(input)) return input.map((v) => String(v));
-  if (typeof input === 'string') return input.split(/\r?\n|,/).map((v) => v.trim()).filter(Boolean);
+  if (typeof input === 'string')
+    return input
+      .split(/\r?\n|,/)
+      .map((v) => v.trim())
+      .filter(Boolean);
   return [];
 }
 
@@ -111,7 +134,9 @@ function isRecord(val: unknown): val is Record<string, unknown> {
   return typeof val === 'object' && val !== null;
 }
 
-function normalizeDescription(raw: unknown): EventDescriptionItem[] | undefined {
+function normalizeDescription(
+  raw: unknown,
+): EventDescriptionItem[] | undefined {
   if (!raw) return undefined;
   const arr: unknown[] = Array.isArray(raw) ? raw : [raw];
   const out: EventDescriptionItem[] = [];
@@ -124,22 +149,39 @@ function normalizeDescription(raw: unknown): EventDescriptionItem[] | undefined 
       out.push({ type: EventDescriptionType.Paragraph, value: it });
       continue;
     }
-    const typeStr = isRecord(it) && typeof it.type === 'string' ? it.type.toLowerCase() : '';
+    const typeStr =
+      isRecord(it) && typeof it.type === 'string' ? it.type.toLowerCase() : '';
     const type: EventDescriptionType = AllowedDescTypes.has(typeStr)
       ? (typeStr as EventDescriptionType)
       : EventDescriptionType.Paragraph;
-    const rawVal: unknown = isRecord(it) && 'value' in it ? (it as Record<string, unknown>).value : undefined;
+    const rawVal: unknown =
+      isRecord(it) && 'value' in it
+        ? (it as Record<string, unknown>).value
+        : undefined;
     if (type === EventDescriptionType.List) {
       out.push({ type, value: toArrayOfStrings(rawVal) });
       continue;
     }
     if (type === EventDescriptionType.Quote) {
       if (isRecord(rawVal)) {
-        const textRaw = (rawVal as Record<string, unknown>).text ?? (rawVal as Record<string, unknown>).quote ?? (rawVal as Record<string, unknown>).content;
+        const textRaw =
+          (rawVal as Record<string, unknown>).text ??
+          (rawVal as Record<string, unknown>).quote ??
+          (rawVal as Record<string, unknown>).content;
         const text = typeof textRaw === 'string' ? textRaw : '';
-        const r = (rawVal as Record<string, unknown>).ref ?? (rawVal as Record<string, unknown>).reference ?? (rawVal as Record<string, unknown>).citation;
+        const r =
+          (rawVal as Record<string, unknown>).ref ??
+          (rawVal as Record<string, unknown>).reference ??
+          (rawVal as Record<string, unknown>).citation;
         const ref = typeof r === 'string' && r.trim() ? r : undefined;
-        out.push({ type, value: { text, ...(ref ? { ref } : {}) } });
+        out.push({
+          type,
+          value: {
+            text,
+            ...(ref ? { ref } : {}),
+            ...bibleVerseFields(rawVal),
+          },
+        });
       } else {
         out.push({ type, value: { text: String(rawVal ?? '') } });
       }
@@ -150,9 +192,10 @@ function normalizeDescription(raw: unknown): EventDescriptionItem[] | undefined 
       const url =
         typeof rawVal === 'string'
           ? rawVal
-          : isRecord(rawVal) && typeof (rawVal as Record<string, unknown>).url === 'string'
-          ? ((rawVal as Record<string, unknown>).url as string)
-          : '';
+          : isRecord(rawVal) &&
+              typeof (rawVal as Record<string, unknown>).url === 'string'
+            ? ((rawVal as Record<string, unknown>).url as string)
+            : '';
       out.push({ type, value: url });
       continue;
     }
@@ -196,7 +239,10 @@ export async function listEvents(): Promise<WithId<EventDoc>[]> {
             const primary = typeof pVal === 'string' ? pVal : undefined;
             const secondary = typeof sVal === 'string' ? sVal : undefined;
             if (primary || secondary)
-              return { ...(primary ? { primary } : { primary: '' }), ...(secondary ? { secondary } : {}) } as {
+              return {
+                ...(primary ? { primary } : { primary: '' }),
+                ...(secondary ? { secondary } : {}),
+              } as {
                 primary: string;
                 secondary?: string;
               };
@@ -239,8 +285,14 @@ function sanitizeEventForWrite(data: Partial<EventDoc>): Partial<EventDoc> {
       const p = locRaw.trim();
       out = p ? { primary: p } : undefined;
     } else if (isRecord(locRaw)) {
-      const p = typeof (locRaw as Record<string, unknown>).primary === 'string' ? ((locRaw as Record<string, unknown>).primary as string).trim() : '';
-      const s = typeof (locRaw as Record<string, unknown>).secondary === 'string' ? ((locRaw as Record<string, unknown>).secondary as string).trim() : '';
+      const p =
+        typeof (locRaw as Record<string, unknown>).primary === 'string'
+          ? ((locRaw as Record<string, unknown>).primary as string).trim()
+          : '';
+      const s =
+        typeof (locRaw as Record<string, unknown>).secondary === 'string'
+          ? ((locRaw as Record<string, unknown>).secondary as string).trim()
+          : '';
       if (p || s) out = { primary: p, ...(s ? { secondary: s } : {}) };
     }
     (result as Record<string, unknown>).location = out;
@@ -270,7 +322,10 @@ export async function addEvent(data: EventDoc): Promise<string> {
   }
 }
 
-export async function updateEvent(id: string, data: Partial<EventDoc>): Promise<void> {
+export async function updateEvent(
+  id: string,
+  data: Partial<EventDoc>,
+): Promise<void> {
   console.log('[eventsApi] updateEvent id', id, 'data', data);
   try {
     if (Object.prototype.hasOwnProperty.call(data, 'category')) {

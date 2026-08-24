@@ -9,11 +9,13 @@ import type { WithId, AudioDoc } from "@/lib/api/audios";
 import AudiosList from "./_components/AudiosList";
 import ConfirmDeleteModal from "@/components/ui/ConfirmDeleteModal";
 import AudiosFormModal from "./_components/AudiosFormModal";
+import { useContentNotification } from "@/lib/notifications/useContentNotification";
 
 export default function AudiosClient() {
   const dispatch = useAppDispatch();
   const { items, status } = useAppSelector((s) => s.audios);
   const loading = status === "loading";
+  const { notifying, notify } = useContentNotification();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalType, setModalType] = useState<"add" | "edit">("add");
@@ -84,7 +86,20 @@ export default function AudiosClient() {
         </div>
       </div>
 
-      <AudiosList items={items} onEdit={openEdit} onDelete={onDelete} />
+      <AudiosList
+        items={items}
+        notifying={notifying}
+        onEdit={openEdit}
+        onDelete={onDelete}
+        onNotify={(it) =>
+          notify({
+            type: "audio",
+            id: it.id,
+            title: it.title,
+            imageUrl: it.thumbnailUrl,
+          })
+        }
+      />
 
       <AudiosFormModal
         open={isModalOpen}

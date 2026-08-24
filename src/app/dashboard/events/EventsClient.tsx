@@ -10,6 +10,7 @@ import type { WithId, EventDoc } from "@/lib/api/events";
 import EventsList from "./_components/EventsList";
 import EventsFormModal from "./_components/EventsFormModal";
 import ConfirmDeleteModal from "@/components/ui/ConfirmDeleteModal";
+import { useContentNotification } from "@/lib/notifications/useContentNotification";
 //
 
 export default function EventsClient() {
@@ -17,6 +18,7 @@ export default function EventsClient() {
   const { items, status } = useAppSelector((s) => s.events);
   const catState = useAppSelector((s) => s.eventCategories);
   const loading = status === "loading";
+  const { notifying, notify } = useContentNotification();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalType, setModalType] = useState<"add" | "edit">("add");
@@ -27,6 +29,10 @@ export default function EventsClient() {
 
   // Filter: all / upcoming / past
   const [filter, setFilter] = useState<"all" | "upcoming" | "past">("all");
+
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [isBatchDeleteOpen, setIsBatchDeleteOpen] = useState(false);
+  const [batchDeleting, setBatchDeleting] = useState(false);
 
   useEffect(() => {
     if (status === "idle") {
@@ -46,6 +52,27 @@ export default function EventsClient() {
   }, []);
 
   const categories = useMemo(() => catState.items.map((c) => c.name), [catState.items]);
+
+  const visibleItems = useMemo(() => {
+    const now = Date.now();
+    if (filter === "all") return items;
+    return items.filter((it) => {
+      const tStr = it.end_date_time || it.start_date_time;
+      if (!tStr) return filter === "past" ? false : true;
+      const t = new Date(tStr as string).getTime();
+      if (isNaN(t)) return true;
+      return filter === "past" ? t < now : t >= now;
+    });
+  }, [items, filter]);
+
+  // Drop selections that are no longer visible (filter change or deletion)
+  useEffect(() => {
+    setSelectedIds((prev) => {
+      const visible = new Set(visibleItems.map((it) => it.id));
+      const next = prev.filter((id) => visible.has(id));
+      return next.length === prev.length ? prev : next;
+    });
+  }, [visibleItems]);
 
   const openAdd = () => {
     setModalType("add");
@@ -92,11 +119,56 @@ export default function EventsClient() {
     }
   };
 
+  const toggleSelect = (id: string) =>
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+
+  const allSelected = visibleItems.length > 0 && selectedIds.length === visibleItems.length;
+
+  const toggleSelectAll = () => setSelectedIds(allSelected ? [] : visibleItems.map((it) => it.id));
+
+  const confirmBatchDelete = async () => {
+    if (selectedIds.length === 0) return;
+    setBatchDeleting(true);
+    const results = await Promise.allSettled(
+      selectedIds.map((id) => dispatch(removeEvent(id)).unwrap())
+    );
+    const failed = results.filter((r) => r.status === "rejected").length;
+    const succeeded = results.length - failed;
+    if (succeeded > 0) toast.success(`${succeeded} event${succeeded === 1 ? "" : "s"} deleted`);
+    if (failed > 0) toast.error(`${failed} failed to delete`);
+    setBatchDeleting(false);
+    setIsBatchDeleteOpen(false);
+    setSelectedIds([]);
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-xl font-semibold text-primary-800">Events</h2>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          {visibleItems.length > 0 && (
+            <>
+              <label className="flex items-center gap-2 text-sm text-primary-700">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-primary-300 accent-red-600"
+                  checked={allSelected}
+                  onChange={toggleSelectAll}
+                />
+                <span>Select all</span>
+              </label>
+              {selectedIds.length > 0 && (
+                <AppButton
+                  variant={AppButtonVariant.Delete}
+                  className="px-3 py-1 text-xs"
+                  onClick={() => setIsBatchDeleteOpen(true)}
+                  disabled={batchDeleting}
+                >
+                  Delete Selected ({selectedIds.length})
+                </AppButton>
+              )}
+            </>
+          )}
           <label className="text-sm text-primary-700">
             <span className="mr-2">Filter:</span>
             <select
@@ -114,19 +186,20 @@ export default function EventsClient() {
       </div>
 
       <EventsList
-        items={useMemo(() => {
-          const now = Date.now();
-          if (filter === "all") return items;
-          return items.filter((it) => {
-            const tStr = it.end_date_time || it.start_date_time;
-            if (!tStr) return filter === "past" ? false : true;
-            const t = new Date(tStr as string).getTime();
-            if (isNaN(t)) return true;
-            return filter === "past" ? t < now : t >= now;
-          });
-        }, [items, filter])}
+        items={visibleItems}
+        notifying={notifying}
         onEdit={openEdit}
         onDelete={onDelete}
+        onNotify={(it) =>
+          notify({
+            type: "event",
+            id: it.id,
+            title: it.title,
+            imageUrl: it.imageUrl,
+          })
+        }
+        selectedIds={selectedIds}
+        onToggleSelect={toggleSelect}
       />
 
       <EventsFormModal
@@ -147,6 +220,16 @@ export default function EventsClient() {
         }}
         onConfirm={confirmDelete}
         confirmLabel="Delete"
+      />
+
+      {/* Batch Delete Modal */}
+      <ConfirmDeleteModal
+        open={isBatchDeleteOpen}
+        title={`Delete ${selectedIds.length} selected event${selectedIds.length === 1 ? "" : "s"}?`}
+        onCancel={() => setIsBatchDeleteOpen(false)}
+        onConfirm={confirmBatchDelete}
+        confirmLabel={batchDeleting ? "Deleting..." : "Delete All"}
+        disabled={batchDeleting}
       />
     </div>
   );

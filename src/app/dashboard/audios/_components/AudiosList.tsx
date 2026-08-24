@@ -1,16 +1,21 @@
 "use client";
 
 import AppButton, { AppButtonVariant } from "@/components/ui/AppButton";
+import NotifyButton from "@/components/ui/NotifyButton";
 import type { WithId, AudioDoc } from "@/lib/api/audios";
 
 export default function AudiosList({
   items,
+  notifying,
   onEdit,
   onDelete,
+  onNotify,
 }: {
   items: WithId<AudioDoc>[];
+  notifying?: boolean;
   onEdit: (it: WithId<AudioDoc>) => void;
   onDelete: (id: string) => void;
+  onNotify?: (it: WithId<AudioDoc>) => void;
 }) {
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 items-start">
@@ -34,6 +39,9 @@ export default function AudiosList({
           <div className="mt-3 flex items-center gap-2">
             <AppButton variant={AppButtonVariant.Edit} onClick={() => onEdit(it)}>Edit</AppButton>
             <AppButton variant={AppButtonVariant.Delete} onClick={() => onDelete(it.id)}>Delete</AppButton>
+            {onNotify && (
+              <NotifyButton onClick={() => onNotify(it)} disabled={notifying} />
+            )}
             {it.audioUrl && (
               <a href={it.audioUrl} target="_blank" rel="noreferrer" className="ml-auto text-sm text-primary-700 underline">Open</a>
             )}

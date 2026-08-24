@@ -68,7 +68,10 @@ export default function EventsFormModal({
           return { type: d.type, value: (d.value || []).join("\n") } as FormDescItem;
         case EventDescriptionType.Quote: {
           const q = d.value as QuoteValue;
-          return { type: d.type, value: { text: q.text ?? "", ...(q.ref ? { ref: q.ref } : {}) } } as FormDescItem;
+          return {
+            type: d.type,
+            value: { ...q, text: q.text ?? "" },
+          } as FormDescItem;
         }
         case EventDescriptionType.Title:
           return { type: d.type, value: String(d.value ?? "") } as FormDescItem;

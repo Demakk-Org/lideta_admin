@@ -3,6 +3,7 @@
 import { useState } from "react";
 import AppButton, { AppButtonVariant } from "@/components/ui/AppButton";
 import { EventDescriptionType, type QuoteValue } from "@/lib/api/events";
+import QuoteBlockFields from "@/components/ui/QuoteBlockFields";
 import { uploadEventImage } from "@/lib/api/storage";
 import FileUploadButton from "@/components/ui/FileUploadButton";
 import DraggableList from "@/components/ui/DraggableList";
@@ -101,56 +102,34 @@ export default function DescriptionBlocksEditor({
                 rows={3}
               />
             ) : blk.type === EventDescriptionType.Quote ? (
-              <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <input
-                  type="text"
-                  value={typeof blk.value === "object" && blk.value && !Array.isArray(blk.value) ? (blk.value as QuoteValue).text : String(blk.value ?? "")}
-                  onChange={(e) =>
-                    onChange(
-                      items.map((b, i) =>
-                        i === idx
-                          ? {
-                              ...b,
-                              value: {
-                                text: e.target.value,
-                                ref:
-                                  typeof b.value === "object" && b.value && !Array.isArray(b.value)
-                                    ? (b.value as QuoteValue).ref
-                                    : undefined,
-                              } as QuoteValue,
-                            }
-                          : b
-                      )
+              <QuoteBlockFields
+                value={
+                  typeof blk.value === "object" &&
+                  blk.value &&
+                  !Array.isArray(blk.value)
+                    ? {
+                        ...(blk.value as QuoteValue),
+                        text: (blk.value as QuoteValue).text ?? "",
+                        ref: (blk.value as QuoteValue).ref ?? "",
+                      }
+                    : { text: String(blk.value ?? ""), ref: "" }
+                }
+                onChange={(next) =>
+                  onChange(
+                    items.map((b, i) =>
+                      i === idx
+                        ? {
+                            ...b,
+                            value: {
+                              ...next,
+                              ...(next.ref ? { ref: next.ref } : { ref: undefined }),
+                            } as QuoteValue,
+                          }
+                        : b
                     )
-                  }
-                  className="block w-full rounded-md border border-primary-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  placeholder="Quote text"
-                />
-                <input
-                  type="text"
-                  value={typeof blk.value === "object" && blk.value && !Array.isArray(blk.value) ? (blk.value as QuoteValue).ref ?? "" : ""}
-                  onChange={(e) =>
-                    onChange(
-                      items.map((b, i) =>
-                        i === idx
-                          ? {
-                              ...b,
-                              value: {
-                                text:
-                                  typeof b.value === "object" && b.value && !Array.isArray(b.value)
-                                    ? (b.value as QuoteValue).text
-                                    : String(b.value ?? ""),
-                                ref: e.target.value,
-                              } as QuoteValue,
-                            }
-                          : b
-                      )
-                    )
-                  }
-                  className="block w-full rounded-md border border-primary-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  placeholder="Reference (optional)"
-                />
-              </div>
+                  )
+                }
+              />
             ) : blk.type === EventDescriptionType.Banner ? (
               <div className="mt-2 space-y-2">
                 <div className="flex flex-col gap-2">

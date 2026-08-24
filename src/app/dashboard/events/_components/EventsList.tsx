@@ -1,6 +1,7 @@
 "use client";
 
 import AppButton, { AppButtonVariant } from "@/components/ui/AppButton";
+import NotifyButton from "@/components/ui/NotifyButton";
 import type { WithId, EventDoc, EventDescriptionItem } from "@/lib/api/events";
 import { EventDescriptionType } from "@/lib/api/events";
 
@@ -86,17 +87,43 @@ function renderDescription(items?: EventDescriptionItem[]) {
 
 export default function EventsList({
   items,
+  notifying,
   onEdit,
   onDelete,
+  onNotify,
+  selectedIds,
+  onToggleSelect,
 }: {
   items: WithId<EventDoc>[];
+  notifying?: boolean;
   onEdit: (it: WithId<EventDoc>) => void;
   onDelete: (id: string) => void;
+  onNotify?: (it: WithId<EventDoc>) => void;
+  selectedIds?: string[];
+  onToggleSelect?: (id: string) => void;
 }) {
+  const selectable = typeof onToggleSelect === "function";
+  const selected = new Set(selectedIds ?? []);
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 items-start">
       {items.map((it) => (
-        <div key={it.id} className="rounded-md border border-primary-200 bg-white p-4 shadow-sm">
+        <div
+          key={it.id}
+          className={`rounded-md border bg-white p-4 shadow-sm ${
+            selected.has(it.id) ? "border-red-400 ring-1 ring-red-200" : "border-primary-200"
+          }`}
+        >
+          {selectable && (
+            <label className="mb-2 flex items-center gap-2 text-xs text-primary-700">
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-primary-300 accent-red-600"
+                checked={selected.has(it.id)}
+                onChange={() => onToggleSelect?.(it.id)}
+              />
+              <span>Select</span>
+            </label>
+          )}
           <div className="flex items-start gap-3">
             {it.imageUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
@@ -137,6 +164,13 @@ export default function EventsList({
             <AppButton variant={AppButtonVariant.Delete} className="px-3 py-1 text-xs" onClick={() => onDelete(it.id)}>
               Delete
             </AppButton>
+            {onNotify && (
+              <NotifyButton
+                onClick={() => onNotify(it)}
+                disabled={notifying}
+                className="px-3 py-1 text-xs"
+              />
+            )}
           </div>
         </div>
       ))}

@@ -54,7 +54,10 @@ export default function NewsFormModal({
           return { type: d.type, value: (d.value || []).join("\n") } as FormContentItem;
         case NewsContentType.Quote: {
           const q = d.value as NewsQuoteValue;
-          return { type: d.type, value: { text: q.text ?? "", ...(q.ref ? { ref: q.ref } : {}) } } as FormContentItem;
+          return {
+            type: d.type,
+            value: { ...q, text: q.text ?? "" },
+          } as FormContentItem;
         }
         case NewsContentType.Title:
           return { type: d.type, value: String(d.value ?? "") } as FormContentItem;

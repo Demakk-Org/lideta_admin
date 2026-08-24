@@ -1,5 +1,16 @@
 import { db } from '@/lib/firebase/config';
-import { Timestamp, addDoc, collection, deleteDoc, doc, getDocs, query, updateDoc } from 'firebase/firestore';
+import { bibleVerseFields } from '@/lib/api/quoteVerse';
+import type { BibleVerseFields } from '@/lib/api/quoteVerse';
+import {
+  Timestamp,
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  getDocs,
+  query,
+  updateDoc,
+} from 'firebase/firestore';
 
 export enum NewsContentType {
   Title = 'title',
@@ -9,7 +20,10 @@ export enum NewsContentType {
   List = 'list',
 }
 
-export type NewsQuoteValue = { text: string; ref?: string };
+export type NewsQuoteValue = {
+  text: string;
+  ref?: string;
+} & BibleVerseFields;
 
 export type NewsContentItem =
   | { type: NewsContentType.Title; value: string }
@@ -44,10 +58,15 @@ function normalizeTimestamp(val: unknown): string | undefined {
   try {
     if (!val) return undefined;
     if (val instanceof Timestamp) return val.toDate().toISOString();
-    if (typeof val === 'object' && val !== null && 'seconds' in val && 'nanoseconds' in val) {
+    if (
+      typeof val === 'object' &&
+      val !== null &&
+      'seconds' in val &&
+      'nanoseconds' in val
+    ) {
       const t = new Timestamp(
         (val as { seconds: number; nanoseconds: number }).seconds,
-        (val as { seconds: number; nanoseconds: number }).nanoseconds
+        (val as { seconds: number; nanoseconds: number }).nanoseconds,
       );
       return t.toDate().toISOString();
     }
@@ -58,7 +77,11 @@ function normalizeTimestamp(val: unknown): string | undefined {
 
 function toArrayOfStrings(input: unknown): string[] {
   if (Array.isArray(input)) return input.map((v) => String(v));
-  if (typeof input === 'string') return input.split(/\r?\n|,/).map((v) => v.trim()).filter(Boolean);
+  if (typeof input === 'string')
+    return input
+      .split(/\r?\n|,/)
+      .map((v) => v.trim())
+      .filter(Boolean);
   return [];
 }
 
@@ -83,20 +106,39 @@ function normalizeContent(raw: unknown): NewsContentItem[] | undefined {
       out.push({ type: NewsContentType.Paragraph, value: it });
       continue;
     }
-    const typeStr = isRecord(it) && typeof it.type === 'string' ? it.type.toLowerCase() : '';
-    const type: NewsContentType = AllowedTypes.has(typeStr) ? (typeStr as NewsContentType) : NewsContentType.Paragraph;
-    const rawVal: unknown = isRecord(it) && 'value' in it ? (it as Record<string, unknown>).value : undefined;
+    const typeStr =
+      isRecord(it) && typeof it.type === 'string' ? it.type.toLowerCase() : '';
+    const type: NewsContentType = AllowedTypes.has(typeStr)
+      ? (typeStr as NewsContentType)
+      : NewsContentType.Paragraph;
+    const rawVal: unknown =
+      isRecord(it) && 'value' in it
+        ? (it as Record<string, unknown>).value
+        : undefined;
     if (type === NewsContentType.List) {
       out.push({ type, value: toArrayOfStrings(rawVal) });
       continue;
     }
     if (type === NewsContentType.Quote) {
       if (isRecord(rawVal)) {
-        const textRaw = (rawVal as Record<string, unknown>).text ?? (rawVal as Record<string, unknown>).quote ?? (rawVal as Record<string, unknown>).content;
+        const textRaw =
+          (rawVal as Record<string, unknown>).text ??
+          (rawVal as Record<string, unknown>).quote ??
+          (rawVal as Record<string, unknown>).content;
         const text = typeof textRaw === 'string' ? textRaw : '';
-        const r = (rawVal as Record<string, unknown>).ref ?? (rawVal as Record<string, unknown>).reference ?? (rawVal as Record<string, unknown>).citation;
+        const r =
+          (rawVal as Record<string, unknown>).ref ??
+          (rawVal as Record<string, unknown>).reference ??
+          (rawVal as Record<string, unknown>).citation;
         const ref = typeof r === 'string' && r.trim() ? r : undefined;
-        out.push({ type, value: { text, ...(ref ? { ref } : {}) } });
+        out.push({
+          type,
+          value: {
+            text,
+            ...(ref ? { ref } : {}),
+            ...bibleVerseFields(rawVal),
+          },
+        });
       } else {
         out.push({ type, value: { text: String(rawVal ?? '') } });
       }
@@ -106,9 +148,10 @@ function normalizeContent(raw: unknown): NewsContentItem[] | undefined {
       const url =
         typeof rawVal === 'string'
           ? rawVal
-          : isRecord(rawVal) && typeof (rawVal as Record<string, unknown>).url === 'string'
-          ? ((rawVal as Record<string, unknown>).url as string)
-          : '';
+          : isRecord(rawVal) &&
+              typeof (rawVal as Record<string, unknown>).url === 'string'
+            ? ((rawVal as Record<string, unknown>).url as string)
+            : '';
       out.push({ type, value: url });
       continue;
     }
@@ -127,11 +170,11 @@ function sanitizeForWrite(data: Partial<NewsDoc>): Partial<NewsDoc> {
     (result as Record<string, unknown>).tags = Array.isArray(tRaw)
       ? tRaw.map((v) => String(v).trim()).filter(Boolean)
       : typeof tRaw === 'string'
-      ? tRaw
-          .split(/\r?\n|,/)
-          .map((v) => v.trim())
-          .filter(Boolean)
-      : undefined;
+        ? tRaw
+            .split(/\r?\n|,/)
+            .map((v) => v.trim())
+            .filter(Boolean)
+        : undefined;
   }
   return result;
 }
@@ -162,11 +205,17 @@ export async function listNews(): Promise<WithId<NewsDoc>[]> {
 export async function addNews(data: NewsDoc): Promise<string> {
   console.log('[newsApi] addNews payload', data);
   try {
-    if (!data.title || !data.title.trim()) throw new Error('News title is required');
-    if (!data.category || !data.category.trim()) throw new Error('News category is required');
-    if (!data.author_id || !data.author_id.trim()) throw new Error('Author is required');
+    if (!data.title || !data.title.trim())
+      throw new Error('News title is required');
+    if (!data.category || !data.category.trim())
+      throw new Error('News category is required');
+    if (!data.author_id || !data.author_id.trim())
+      throw new Error('Author is required');
     const toWrite = sanitizeForWrite(data);
-    const docRef = await addDoc(colRef, { ...toWrite, createdAt: Timestamp.now() });
+    const docRef = await addDoc(colRef, {
+      ...toWrite,
+      createdAt: Timestamp.now(),
+    });
     console.log('[newsApi] created id', docRef.id);
     return docRef.id;
   } catch (err) {
@@ -175,7 +224,10 @@ export async function addNews(data: NewsDoc): Promise<string> {
   }
 }
 
-export async function updateNews(id: string, data: Partial<NewsDoc>): Promise<void> {
+export async function updateNews(
+  id: string,
+  data: Partial<NewsDoc>,
+): Promise<void> {
   console.log('[newsApi] updateNews id', id, 'data', data);
   try {
     if (Object.prototype.hasOwnProperty.call(data, 'title')) {
@@ -215,4 +267,3 @@ export async function deleteNews(id: string): Promise<void> {
     throw new Error('Failed to delete news');
   }
 }
-
