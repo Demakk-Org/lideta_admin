@@ -16,6 +16,9 @@ import usersReducer from './features/usersSlice';
 import todayParagraphsReducer from './features/todayParagraphsSlice';
 import quizzesReducer from './features/quizzesSlice';
 import quizCategoriesReducer from './features/quizCategoriesSlice';
+import coursesReducer from './features/coursesSlice';
+import lessonsReducer from './features/lessonsSlice';
+import courseCategoriesReducer from './features/courseCategoriesSlice';
 
 // Import your reducers here
 // import someReducer from './features/someFeature/someSlice';
@@ -48,6 +51,9 @@ export const store = configureStore({
     todayParagraphs: todayParagraphsReducer,
     quizzes: quizzesReducer,
     quizCategories: quizCategoriesReducer,
+    courses: coursesReducer,
+    lessons: lessonsReducer,
+    courseCategories: courseCategoriesReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({
