@@ -2,8 +2,24 @@
 
 :root {
   /* Light theme aligned to Tailwind primary palette */
-  --background: #f0f9ff; /* primary-50 */
-  --foreground: #0c4a6e; /* primary-900 */
+  --background: #f9fafb; /* primary-50 */
+  --foreground: #043243; /* primary-900 */
+}
+
+@theme {
+  /* Tailwind v4 ignores tailwind.config.js, so the primary scale lives here. */
+  /* Light steps are neutral gray (surfaces, borders, muted icons); */
+  /* the 500-900 steps stay blue so accents and text keep their contrast. */
+  --color-primary-50: #f9fafb;
+  --color-primary-100: #f3f4f6;
+  --color-primary-200: #e5e7eb;
+  --color-primary-300: #d1d5db;
+  --color-primary-400: #9ca3af;
+  --color-primary-500: #0b7fa8;
+  --color-primary-600: #0a6b8e;
+  --color-primary-700: #085874;
+  --color-primary-800: #06455c;
+  --color-primary-900: #043243;
 }
 
 @theme inline {
@@ -13,11 +29,85 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/*
+ * Dark theme. The whole app is painted with `primary-*`, `bg-white` and a few
+ * `gray-*` utilities, and Tailwind v4 compiles those to `var(--color-…)`, so
+ * redefining the tokens here flips every screen without touching components.
+ * The primary ramp inverts: 50-400 go from light surfaces to dark surfaces,
+ * 500-900 go from dark ink to light ink, and `white` becomes the raised card
+ * surface (which is why `text-white` on an accent button stays readable).
+ */
+:root[data-theme='dark'] {
+  --background: #111517;
+  --foreground: #e8f6fb;
+
+  --color-primary-50: #111517;
+  --color-primary-100: #1b2226;
+  --color-primary-200: #2a343a;
+  --color-primary-300: #3d4a52;
+  --color-primary-400: #7d8f99;
+  --color-primary-500: #38b6dd;
+  --color-primary-600: #57c4e6;
+  --color-primary-700: #a8dcee;
+  --color-primary-800: #cbeaf6;
+  --color-primary-900: #e8f6fb;
+
+  --color-white: #171e22;
+  --color-gray-50: #1b2226;
+  --color-gray-100: #222b30;
+  --color-gray-200: #2a343a;
+  --color-gray-400: #7d8f99;
+  --color-gray-600: #9aa7ae;
+  --color-gray-700: #b6c2c8;
+  --color-gray-900: #e6edf1;
+
+  /* The daily-verse calendar (and a few other screens) are painted in slate
+     rather than the primary scale, so it inverts the same way. */
+  --color-slate-50: #1b2226;
+  --color-slate-100: #222b30;
+  --color-slate-200: #2f3a41;
+  --color-slate-300: #46545d;
+  --color-slate-400: #8496a0;
+  --color-slate-500: #9fb0b9;
+  --color-slate-600: #bccad1;
+  --color-slate-700: #d3dde2;
+  --color-slate-800: #e6edf1;
+  --color-slate-900: #f2f7f9;
+
+  /* Status accents: the 50-200 steps are tinted backgrounds and rings, so they
+     become deep tints; 600-800 are solid fills and label text, so they lighten.
+     700 stays lighter than 600 to keep `hover:bg-*-700` reading as brighter. */
+  --color-emerald-50: #0e2a20;
+  --color-emerald-100: #123527;
+  --color-emerald-200: #1d5540;
+  --color-emerald-500: #34d399;
+  --color-emerald-600: #34d399;
+  --color-emerald-700: #6ee7b7;
+  --color-emerald-800: #a7f3d0;
+
+  --color-red-50: #2c1416;
+  --color-red-100: #3a181b;
+  --color-red-200: #5b2126;
+  --color-red-400: #f87171;
+  --color-red-500: #f87171;
+  --color-red-600: #f87171;
+  --color-red-700: #fca5a5;
+  --color-red-800: #fecaca;
+
+  --color-amber-50: #2b2008;
+  --color-amber-100: #382a0b;
+  --color-amber-200: #574016;
+  --color-amber-700: #fcd34d;
+  --color-amber-800: #fde68a;
+
+  --color-sky-100: #0d3346;
+  --color-sky-800: #bae6fd;
+  --color-indigo-100: #1e1b4b;
+  --color-indigo-800: #c7d2fe;
+  --color-violet-100: #2e1065;
+  --color-violet-800: #ddd6fe;
+
+  color-scheme: dark;
 }
 
 body {

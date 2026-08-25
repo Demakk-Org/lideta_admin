@@ -6,7 +6,9 @@ import { useAppDispatch, useAppSelector } from "@/lib/redux/store";
 import AppButton, { AppButtonVariant } from "@/components/ui/AppButton";
 import ConfirmDeleteModal from "@/components/ui/ConfirmDeleteModal";
 import {
+  createCourseQuiz,
   createDailyQuiz,
+  createLessonQuiz,
   createStandardQuiz,
   createStudyQuiz,
   editQuiz,
@@ -18,7 +20,9 @@ import { fetchQuizCategories } from "@/lib/redux/features/quizCategoriesSlice";
 import { fetchBibleStudies } from "@/lib/redux/features/bibleStudiesSlice";
 import { QuizKind } from "@/lib/api/quizzes";
 import type {
+  CreateCourseQuizInput,
   CreateDailyQuizInput,
+  CreateLessonQuizInput,
   CreateStandardQuizInput,
   CreateStudyQuizInput,
   QuizDoc,
@@ -26,11 +30,15 @@ import type {
   WithId,
 } from "@/lib/api/quizzes";
 import { countQuestions } from "@/lib/api/questions";
+import { listCourseOptions } from "@/lib/api/courses";
+import { listLessonOptions } from "@/lib/api/lessons";
+import type { CourseOption } from "@/lib/api/courses";
+import type { LessonOption } from "@/lib/api/lessons";
 import QuizzesList from "./_components/QuizzesList";
 import QuizFormModal from "./_components/QuizFormModal";
 import QuestionsModal from "./_components/QuestionsModal";
 
-type KindFilter = "all" | QuizKind.Standard | QuizKind.Daily | QuizKind.Study;
+type KindFilter = "all" | QuizKind;
 type StatusFilter = "all" | "draft" | "published";
 
 export default function QuizzesClient() {
@@ -52,6 +60,10 @@ export default function QuizzesClient() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [publishingId, setPublishingId] = useState<string | null>(null);
 
+  // Courses and lessons have no admin module yet; these back the quiz pickers.
+  const [lessonOptions, setLessonOptions] = useState<LessonOption[]>([]);
+  const [courseOptions, setCourseOptions] = useState<CourseOption[]>([]);
+
   const [questionsQuiz, setQuestionsQuiz] = useState<WithId<QuizDoc> | null>(null);
   const [questionCounts, setQuestionCounts] = useState<Record<string, number>>({});
 
@@ -66,6 +78,22 @@ export default function QuizzesClient() {
     if (typeof document !== "undefined") {
       document.body.style.overflow = "";
     }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      // Lessons are a subcollection, so the course list comes first.
+      const courseList = await listCourseOptions();
+      if (cancelled) return;
+      setCourseOptions(courseList);
+      const lessonList = await listLessonOptions(courseList.map((c) => c.id));
+      if (cancelled) return;
+      setLessonOptions(lessonList);
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Fetch question counts for any quiz we don't already have a count for.
@@ -124,6 +152,26 @@ export default function QuizzesClient() {
     return set;
   }, [items]);
 
+  // Whole quiz ids, not the suffix: `lesson-{courseId}-{lessonId}` can't be
+  // split back into its two halves unambiguously.
+  const existingLessonQuizIds = useMemo(() => {
+    const set = new Set<string>();
+    for (const it of items) {
+      if (it.kind === QuizKind.Lesson) set.add(it.id);
+    }
+    return set;
+  }, [items]);
+
+  const existingCourseIds = useMemo(() => {
+    const set = new Set<string>();
+    for (const it of items) {
+      if (it.kind === QuizKind.Course && it.id.startsWith("course-")) {
+        set.add(it.id.slice("course-".length));
+      }
+    }
+    return set;
+  }, [items]);
+
   const editingItem = useMemo(
     () => (editingId ? items.find((x) => x.id === editingId) : undefined),
     [items, editingId],
@@ -158,6 +206,18 @@ export default function QuizzesClient() {
   const handleCreateStudy = async (payload: CreateStudyQuizInput) => {
     await dispatch(createStudyQuiz(payload)).unwrap();
     toast.success("Study quiz added");
+    setIsModalOpen(false);
+  };
+
+  const handleCreateLesson = async (payload: CreateLessonQuizInput) => {
+    await dispatch(createLessonQuiz(payload)).unwrap();
+    toast.success("Lesson quiz added");
+    setIsModalOpen(false);
+  };
+
+  const handleCreateCourse = async (payload: CreateCourseQuizInput) => {
+    await dispatch(createCourseQuiz(payload)).unwrap();
+    toast.success("Course quiz added");
     setIsModalOpen(false);
   };
 
@@ -231,6 +291,8 @@ export default function QuizzesClient() {
               <option value={QuizKind.Standard}>Standard</option>
               <option value={QuizKind.Daily}>Daily</option>
               <option value={QuizKind.Study}>Study</option>
+              <option value={QuizKind.Lesson}>Lesson</option>
+              <option value={QuizKind.Course}>Course</option>
             </select>
           </label>
           <label className="text-sm text-primary-700">
@@ -272,12 +334,18 @@ export default function QuizzesClient() {
         initial={editingItem}
         categories={catState.items}
         bibleStudies={studiesState.items}
+        lessons={lessonOptions}
+        courses={courseOptions}
         existingDailyDates={existingDailyDates}
         existingStudyIds={existingStudyIds}
+        existingLessonQuizIds={existingLessonQuizIds}
+        existingCourseIds={existingCourseIds}
         onClose={closeModal}
         onCreateStandard={handleCreateStandard}
         onCreateDaily={handleCreateDaily}
         onCreateStudy={handleCreateStudy}
+        onCreateLesson={handleCreateLesson}
+        onCreateCourse={handleCreateCourse}
         onEdit={handleEdit}
       />
 
@@ -285,6 +353,7 @@ export default function QuizzesClient() {
         open={!!questionsQuiz}
         quizId={questionsQuiz?.id ?? null}
         quizTitle={questionsQuiz?.title}
+        quizKind={questionsQuiz?.kind}
         onClose={() => setQuestionsQuiz(null)}
         onCountChange={(id, count) =>
           setQuestionCounts((prev) => ({ ...prev, [id]: count }))

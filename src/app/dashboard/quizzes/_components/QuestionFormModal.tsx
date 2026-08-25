@@ -37,6 +37,7 @@ export default function QuestionFormModal({
   mode,
   initial,
   defaultOrder,
+  allowedTypes,
   onClose,
   onSubmit,
 }: {
@@ -44,9 +45,15 @@ export default function QuestionFormModal({
   mode: Mode;
   initial?: QuestionDoc;
   defaultOrder: number;
+  /** Types offered in the picker. Defaults to all of them. */
+  allowedTypes?: QuestionType[];
   onClose: () => void;
   onSubmit: (payload: QuestionWriteInput) => Promise<void> | void;
 }) {
+  const typeChoices =
+    allowedTypes && allowedTypes.length
+      ? allowedTypes
+      : (Object.keys(QUESTION_TYPE_LABELS) as QuestionType[]);
   const [text, setText] = useState("");
   const [questionType, setQuestionType] = useState<QuestionType>(
     QuestionType.MultipleChoice,
@@ -216,7 +223,7 @@ export default function QuestionFormModal({
             onChange={(e) => setQuestionType(e.target.value as QuestionType)}
             className="mt-1 block w-full rounded-md border border-primary-300 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
           >
-            {(Object.keys(QUESTION_TYPE_LABELS) as QuestionType[]).map((k) => (
+            {typeChoices.map((k) => (
               <option key={k} value={k}>
                 {QUESTION_TYPE_LABELS[k]}
               </option>

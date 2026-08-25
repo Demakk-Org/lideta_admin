@@ -2,6 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import AppButton, { AppButtonVariant } from "@/components/ui/AppButton";
+import AppModal from "@/components/ui/AppModal";
+import DevicePreviewSelector, {
+  DEFAULT_PREVIEW_DEVICE,
+  previewWidthClass,
+  type PreviewDevice,
+} from "@/components/ui/DevicePreviewSelector";
 import NotifyButton from "@/components/ui/NotifyButton";
 import Pagination from "@/components/ui/Pagination";
 import type { WithId, NewsDoc, NewsContentItem, NewsQuoteValue } from "@/lib/api/news";
@@ -21,6 +27,23 @@ function toDisplayString(val: unknown): string {
     }
   }
   return String(val);
+}
+
+function AuthorBadge({ author }: { author?: WithUserId<UserDoc> }) {
+  if (!author) return null;
+  return (
+    <div className="mt-1 flex items-center gap-2">
+      {author.imageUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={author.imageUrl} alt={author.name} className="h-5 w-5 rounded object-cover border" />
+      ) : (
+        <div className="h-5 w-5 rounded border bg-primary-50 flex items-center justify-center text-[10px] text-primary-600">
+          {(author.name?.[0] || "U").toUpperCase()}
+        </div>
+      )}
+      <span className="text-[12px] text-primary-700">{author.name || author.email}</span>
+    </div>
+  );
 }
 
 function renderContent(items?: NewsContentItem[]) {
@@ -101,6 +124,8 @@ export default function NewsList({
 
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(9);
+  const [detail, setDetail] = useState<WithId<NewsDoc> | null>(null);
+  const [device, setDevice] = useState<PreviewDevice>(DEFAULT_PREVIEW_DEVICE);
 
   const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
 
@@ -135,46 +160,38 @@ export default function NewsList({
                 <span>Select</span>
               </label>
             )}
-            <div className="flex items-start gap-3">
-              {it.imageUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={it.imageUrl} alt={it.title} className="h-10 w-10 rounded object-cover border" />
-              ) : null}
-              <div>
-                <h3 className="text-base font-semibold text-primary-900">{it.title}</h3>
-                <p className="text-xs text-primary-600">{it.category}</p>
-                {/* Author */}
-                {(() => {
-                  const author = users.find((u) => u.id === it.author_id);
-                  if (!author) return null;
-                  return (
-                    <div className="mt-1 flex items-center gap-2">
-                      {author.imageUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={author.imageUrl} alt={author.name} className="h-5 w-5 rounded object-cover border" />
-                      ) : (
-                        <div className="h-5 w-5 rounded border bg-primary-50 flex items-center justify-center text-[10px] text-primary-600">
-                          {(author.name?.[0] || "U").toUpperCase()}
-                        </div>
-                      )}
-                      <span className="text-[12px] text-primary-700">{author.name || author.email}</span>
-                    </div>
-                  );
-                })()}
-                {it.status && (
-                  <p className="text-[11px] inline-block rounded bg-primary-100 px-2 py-0.5 text-primary-700 mt-1">
-                    {it.status}
-                  </p>
-                )}
-                {it.createdAt && (
-                  <p className="text-[11px] text-primary-500 mt-1">{new Date(it.createdAt).toLocaleString()}</p>
-                )}
+            <button
+              type="button"
+              onClick={() => setDetail(it)}
+              className="block w-full cursor-pointer text-left"
+              title="View full news"
+            >
+              <div className="flex items-start gap-3">
+                {it.imageUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={it.imageUrl} alt={it.title} className="h-10 w-10 rounded object-cover border" />
+                ) : null}
+                <div>
+                  <h3 className="text-base font-semibold text-primary-900">{it.title}</h3>
+                  <p className="text-xs text-primary-600">{it.category}</p>
+                  <AuthorBadge author={users.find((u) => u.id === it.author_id)} />
+                  {it.status && (
+                    <p className="text-[11px] inline-block rounded bg-primary-100 px-2 py-0.5 text-primary-700 mt-1">
+                      {it.status}
+                    </p>
+                  )}
+                  {it.createdAt && (
+                    <p className="text-[11px] text-primary-500 mt-1">{new Date(it.createdAt).toLocaleString()}</p>
+                  )}
+                </div>
               </div>
-            </div>
-            {it.short_description && (
-              <p className="mt-2 text-sm text-primary-800">{it.short_description}</p>
-            )}
-            {renderContent(it.content)}
+              {it.short_description && (
+                <p className="mt-2 line-clamp-3 text-sm text-primary-800">{it.short_description}</p>
+              )}
+              <span className="mt-2 inline-block text-xs font-medium text-primary-700 underline">
+                Read more
+              </span>
+            </button>
             {it.tags && it.tags.length > 0 && (
               <div className="mt-3 flex flex-wrap gap-1">
                 {it.tags.map((t, i) => (
@@ -221,6 +238,52 @@ export default function NewsList({
           />
         </div>
       )}
+
+      <AppModal
+        open={!!detail}
+        type="edit"
+        title={detail?.title ?? "News"}
+        widthClass={previewWidthClass(device)}
+        cancelLabel="Close"
+        onClose={() => setDetail(null)}
+      >
+        {detail && (
+          <div>
+            <DevicePreviewSelector value={device} onChange={setDevice} className="mb-3 w-fit" />
+            {detail.imageUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={detail.imageUrl}
+                alt={detail.title}
+                className="mb-3 max-h-64 w-full rounded-md border object-cover"
+              />
+            ) : null}
+            <p className="text-xs text-primary-600">{detail.category}</p>
+            <AuthorBadge author={users.find((u) => u.id === detail.author_id)} />
+            {detail.status && (
+              <p className="mt-1 inline-block rounded bg-primary-100 px-2 py-0.5 text-[11px] text-primary-700">
+                {detail.status}
+              </p>
+            )}
+            {detail.createdAt && (
+              <p className="mt-1 text-[11px] text-primary-500">{new Date(detail.createdAt).toLocaleString()}</p>
+            )}
+            {detail.short_description && (
+              <p className="mt-3 text-sm text-primary-800">{detail.short_description}</p>
+            )}
+            {renderContent(detail.content)}
+            {detail.tags && detail.tags.length > 0 && (
+              <div className="mt-4 flex flex-wrap gap-1">
+                {detail.tags.map((t, i) => (
+                  <span key={i} className="inline-block rounded bg-primary-100 px-2 py-0.5 text-[11px] text-primary-700">
+                    {t}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </AppModal>
     </div>
   );
 }

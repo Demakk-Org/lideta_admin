@@ -244,6 +244,48 @@ export async function uploadNewsImage(
   }
 }
 
+export async function uploadCourseImage(
+  file: File,
+  titleOrCategory: string
+): Promise<string> {
+  console.log('[storageApi] uploadCourseImage start', { name: file.name, size: file.size });
+  try {
+    const ts = Date.now();
+    const base = sanitizeSegment(titleOrCategory || 'untitled');
+    const path = `courses/${base}/${ts}-${file.name}`;
+    const storageRef = ref(storage, path);
+    const metadata = { contentType: file.type || 'application/octet-stream' };
+    const snap = await uploadBytes(storageRef, file, metadata);
+    const url = await getDownloadURL(snap.ref);
+    console.log('[storageApi] uploadCourseImage success', url);
+    return url;
+  } catch (err) {
+    console.error('[storageApi] uploadCourseImage error', err);
+    throw new Error('Failed to upload course image');
+  }
+}
+
+export async function uploadLessonImage(
+  file: File,
+  titleOrCourse: string
+): Promise<string> {
+  console.log('[storageApi] uploadLessonImage start', { name: file.name, size: file.size });
+  try {
+    const ts = Date.now();
+    const base = sanitizeSegment(titleOrCourse || 'untitled');
+    const path = `lessons/${base}/${ts}-${file.name}`;
+    const storageRef = ref(storage, path);
+    const metadata = { contentType: file.type || 'application/octet-stream' };
+    const snap = await uploadBytes(storageRef, file, metadata);
+    const url = await getDownloadURL(snap.ref);
+    console.log('[storageApi] uploadLessonImage success', url);
+    return url;
+  } catch (err) {
+    console.error('[storageApi] uploadLessonImage error', err);
+    throw new Error('Failed to upload lesson image');
+  }
+}
+
 export async function uploadBibleJson(
   file: File,
   lang: string,

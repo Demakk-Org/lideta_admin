@@ -20,6 +20,7 @@ import type {
   QuestionWriteInput,
   VerseReference,
 } from "@/lib/api/questions";
+import { QuizKind } from "@/lib/api/quizzes";
 import QuestionFormModal from "./QuestionFormModal";
 
 function trueFalseLabel(id: number | null): string {
@@ -57,15 +58,22 @@ export default function QuestionsModal({
   open,
   quizId,
   quizTitle,
+  quizKind,
   onClose,
   onCountChange,
 }: {
   open: boolean;
   quizId: string | null;
   quizTitle?: string;
+  quizKind?: QuizKind;
   onClose: () => void;
   onCountChange?: (quizId: string, count: number) => void;
 }) {
+  // Lesson and course quizzes throw in the app on short_answer.
+  const allowedTypes =
+    quizKind === QuizKind.Lesson || quizKind === QuizKind.Course
+      ? [QuestionType.MultipleChoice, QuestionType.TrueFalse]
+      : undefined;
   const [items, setItems] = useState<QuestionDoc[]>([]);
   const [loading, setLoading] = useState(false);
   const [savingOrder, setSavingOrder] = useState(false);
@@ -259,6 +267,7 @@ export default function QuestionsModal({
         mode={formMode}
         initial={editing ?? undefined}
         defaultOrder={items.length}
+        allowedTypes={allowedTypes}
         onClose={() => {
           if (!submitting) {
             setFormOpen(false);

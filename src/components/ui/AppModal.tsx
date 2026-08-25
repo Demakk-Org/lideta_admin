@@ -16,6 +16,7 @@ type Props = {
   confirmDisabled?: boolean;
   children?: React.ReactNode; // used for add/edit content
   footer?: React.ReactNode; // custom footer actions (e.g., Submit)
+  widthClass?: string; // override the dialog max width (default: max-w-lg)
 };
 
 // Global (module-scoped) reference-counted body scroll lock
@@ -36,7 +37,7 @@ function unlockBodyScroll() {
   }
 }
 
-export default function AppModal({ open, type, title, onClose, onDelete, confirmLabel, cancelLabel = "Cancel", confirmDisabled, children, footer }: Props) {
+export default function AppModal({ open, type, title, onClose, onDelete, confirmLabel, cancelLabel = "Cancel", confirmDisabled, children, footer, widthClass = "max-w-lg" }: Props) {
   const isDelete = type === "delete";
   const computedTitle = title ?? (isDelete ? "Confirm Delete" : type === "add" ? "Add" : "Edit");
 
@@ -52,7 +53,7 @@ export default function AppModal({ open, type, title, onClose, onDelete, confirm
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto p-4">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative z-10 w-full max-w-lg rounded-md border border-primary-200 bg-white p-4 shadow-xl max-h-[85vh] flex flex-col">
+      <div className={`relative z-10 w-full ${widthClass} rounded-md border border-primary-200 bg-white p-4 shadow-xl max-h-[85vh] flex flex-col`}>
         <div className="mb-3 flex items-center justify-between shrink-0">
           <h2 className="text-lg font-semibold text-primary-800">{computedTitle}</h2>
           <button

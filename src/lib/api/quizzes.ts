@@ -3,7 +3,6 @@ import {
   Timestamp,
   addDoc,
   collection,
-  deleteDoc,
   doc,
   getCountFromServer,
   getDoc,
@@ -33,6 +32,8 @@ export enum QuizKind {
   Standard = 'standard',
   Daily = 'daily',
   Study = 'study',
+  Lesson = 'lesson',
+  Course = 'course',
 }
 
 export const AGE_GROUP_LABELS: Record<AgeGroup, string> = {
@@ -53,6 +54,8 @@ export const QUIZ_KIND_LABELS: Record<QuizKind, string> = {
   [QuizKind.Standard]: 'Standard',
   [QuizKind.Daily]: 'Daily',
   [QuizKind.Study]: 'Study',
+  [QuizKind.Lesson]: 'Lesson',
+  [QuizKind.Course]: 'Course',
 };
 
 export type QuizDoc = {
@@ -85,6 +88,18 @@ export function dailyQuizId(d: Date): string {
 
 export function studyQuizId(studyId: string): string {
   return `study-${studyId}`;
+}
+
+/**
+ * Quizzes all share one flat collection while lesson ids are only unique
+ * within their course's subcollection, so the course id is part of the id.
+ */
+export function lessonQuizId(courseId: string, lessonId: string): string {
+  return `lesson-${courseId}-${lessonId}`;
+}
+
+export function courseQuizId(courseId: string): string {
+  return `course-${courseId}`;
 }
 
 function normalizeTimestamp(val: unknown): string | undefined {
@@ -133,6 +148,8 @@ function coerceKind(val: unknown): QuizKind {
   const s = typeof val === 'string' ? val.toLowerCase() : '';
   if (s === QuizKind.Daily) return QuizKind.Daily;
   if (s === QuizKind.Study) return QuizKind.Study;
+  if (s === QuizKind.Lesson) return QuizKind.Lesson;
+  if (s === QuizKind.Course) return QuizKind.Course;
   return QuizKind.Standard;
 }
 
@@ -182,8 +199,11 @@ function sanitizeWrite(data: WritePayload) {
       : new Date(data.createdAt);
   const trimmedCategory =
     typeof data.categoryId === 'string' ? data.categoryId.trim() : '';
+  const title = data.title.trim();
   return {
-    title: data.title.trim(),
+    title,
+    // Browse search does a prefix range on this field.
+    lowerCaseTitle: title.toLowerCase(),
     description: data.description.trim(),
     categoryId: trimmedCategory,
     ageGroup: data.ageGroup,
@@ -306,6 +326,89 @@ export async function addStudyQuiz(input: CreateStudyQuizInput): Promise<string>
   }
 }
 
+export type CreateLessonQuizInput = Omit<
+  WritePayload,
+  'kind' | 'createdAt' | 'categoryId' | 'requiresVerseRead'
+> & {
+  lessonId: string;
+  /** The lesson's parent course — half of the derived quiz id. */
+  courseId: string;
+};
+
+export async function addLessonQuiz(input: CreateLessonQuizInput): Promise<string> {
+  const lessonId = typeof input.lessonId === 'string' ? input.lessonId.trim() : '';
+  if (!lessonId) throw new Error('A lesson is required');
+  const courseId = typeof input.courseId === 'string' ? input.courseId.trim() : '';
+  if (!courseId) throw new Error('The lesson has no course');
+  const id = lessonQuizId(courseId, lessonId);
+  const payload: WritePayload = {
+    title: input.title,
+    description: input.description,
+    categoryId: '',
+    ageGroup: input.ageGroup,
+    dificultyLevel: input.dificultyLevel,
+    kind: QuizKind.Lesson,
+    createdAt: new Date(),
+    requiresVerseRead: false,
+  };
+  validateCreate(payload);
+  try {
+    const ref = doc(colRef, id);
+    const existing = await getDoc(ref);
+    if (existing.exists()) {
+      throw new Error('A quiz already exists for this lesson');
+    }
+    // `hasQuiz` is flipped at publish time, not here: the card is only safe to
+    // show once meta/stat exists, and that document is seeded by publishQuiz.
+    await setDoc(ref, sanitizeWrite(payload));
+    console.log('[quizzesApi] created lesson quiz id', id);
+    return id;
+  } catch (err) {
+    console.error('[quizzesApi] addLessonQuiz error', err);
+    if (err instanceof Error) throw err;
+    throw new Error('Failed to add lesson quiz');
+  }
+}
+
+export type CreateCourseQuizInput = Omit<
+  WritePayload,
+  'kind' | 'createdAt' | 'categoryId' | 'requiresVerseRead'
+> & {
+  courseId: string;
+};
+
+export async function addCourseQuiz(input: CreateCourseQuizInput): Promise<string> {
+  const courseId = typeof input.courseId === 'string' ? input.courseId.trim() : '';
+  if (!courseId) throw new Error('A course is required');
+  const id = courseQuizId(courseId);
+  const payload: WritePayload = {
+    title: input.title,
+    description: input.description,
+    categoryId: '',
+    ageGroup: input.ageGroup,
+    dificultyLevel: input.dificultyLevel,
+    kind: QuizKind.Course,
+    createdAt: new Date(),
+    requiresVerseRead: false,
+  };
+  validateCreate(payload);
+  try {
+    const ref = doc(colRef, id);
+    const existing = await getDoc(ref);
+    if (existing.exists()) {
+      throw new Error('A final quiz already exists for this course');
+    }
+    // hasFinalQuiz is flipped at publish time — see addLessonQuiz.
+    await setDoc(ref, sanitizeWrite(payload));
+    console.log('[quizzesApi] created course quiz id', id);
+    return id;
+  } catch (err) {
+    console.error('[quizzesApi] addCourseQuiz error', err);
+    if (err instanceof Error) throw err;
+    throw new Error('Failed to add course quiz');
+  }
+}
+
 export type UpdateQuizInput = {
   title: string;
   description: string;
@@ -328,6 +431,7 @@ export async function updateQuiz(id: string, data: UpdateQuizInput): Promise<voi
     }
     await updateDoc(doc(colRef, id), {
       title: data.title.trim(),
+      lowerCaseTitle: data.title.trim().toLowerCase(),
       description: data.description.trim(),
       categoryId: data.kind === QuizKind.Standard ? trimmedCategory : '',
       ageGroup: data.ageGroup,
@@ -360,12 +464,26 @@ export async function publishQuiz(id: string): Promise<void> {
     const batch = writeBatch(db);
     batch.update(quizRef, { isPublished: true });
     if (!statSnap.exists()) {
+      // Seeded here and only here; the trial figures are then owned by the
+      // Cloud Function that watches quiz_attempts.
       batch.set(statRef, {
+        quizId: id,
         numberOfQuestions: questionCount,
         averageScore: 0,
         totalNumberOfTrials: 0,
         updatedAt: serverTimestamp(),
         lastTrialAt: null,
+      });
+    }
+    // Announce the quiz to its lesson/course only now that meta/stat exists,
+    // otherwise the card renders NaN / 0 questions.
+    if (id.startsWith('lesson-')) {
+      batch.update(doc(db, 'lessons', id.slice('lesson-'.length)), {
+        hasQuiz: true,
+      });
+    } else if (id.startsWith('course-')) {
+      batch.update(doc(db, 'courses', id.slice('course-'.length)), {
+        hasFinalQuiz: true,
       });
     }
     await batch.commit();
@@ -376,10 +494,54 @@ export async function publishQuiz(id: string): Promise<void> {
   }
 }
 
+const BATCH_LIMIT = 500;
+
+/**
+ * Lesson and course quizzes are announced by a flag on their owner document.
+ * Leaving it set after a delete makes the app show a card for a quiz that is
+ * no longer there. Best-effort: the owner may already be gone.
+ */
+async function clearOwnerQuizFlag(quizId: string): Promise<void> {
+  try {
+    if (quizId.startsWith('lesson-')) {
+      const lessonId = quizId.slice('lesson-'.length);
+      await updateDoc(doc(db, 'lessons', lessonId), { hasQuiz: false });
+    } else if (quizId.startsWith('course-')) {
+      const courseId = quizId.slice('course-'.length);
+      await updateDoc(doc(db, 'courses', courseId), { hasFinalQuiz: false });
+    }
+  } catch (err) {
+    console.warn('[quizzesApi] clearOwnerQuizFlag skipped', quizId, err);
+  }
+}
+
+/**
+ * Deletes the quiz along with its `questions` and `meta` subcollections.
+ * Firestore does not cascade, and quiz ids are derived (`daily-`, `study-`,
+ * `lesson-`, `course-`), so orphaned questions would be adopted by the next
+ * quiz created at the same id.
+ */
 export async function deleteQuiz(id: string): Promise<void> {
   console.log('[quizzesApi] deleteQuiz id', id);
   try {
-    await deleteDoc(doc(colRef, id));
+    const [questionsSnap, metaSnap] = await Promise.all([
+      getDocs(collection(db, 'quizzes', id, 'questions')),
+      getDocs(collection(db, 'quizzes', id, 'meta')),
+    ]);
+
+    const refs = [
+      ...questionsSnap.docs.map((d) => d.ref),
+      ...metaSnap.docs.map((d) => d.ref),
+      doc(colRef, id),
+    ];
+
+    for (let i = 0; i < refs.length; i += BATCH_LIMIT) {
+      const batch = writeBatch(db);
+      for (const ref of refs.slice(i, i + BATCH_LIMIT)) batch.delete(ref);
+      await batch.commit();
+    }
+
+    await clearOwnerQuizFlag(id);
   } catch (err) {
     console.error('[quizzesApi] deleteQuiz error', err);
     throw new Error('Failed to delete quiz');

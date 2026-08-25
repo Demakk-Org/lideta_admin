@@ -4,22 +4,22 @@ import {
   initializeApp,
   applicationDefault,
   cert,
-} from "firebase-admin/app";
-import { getFirestore, FieldValue } from "firebase-admin/firestore";
-import { getAuth } from "firebase-admin/auth";
-import { getMessaging } from "firebase-admin/messaging";
-import type { ServiceAccount } from "firebase-admin";
-import Logger from "../utils/logger";
+} from 'firebase-admin/app';
+import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import { getAuth } from 'firebase-admin/auth';
+import { getMessaging } from 'firebase-admin/messaging';
+import type { ServiceAccount } from 'firebase-admin';
+import Logger from '../utils/logger';
 
 const DATABASE_URL = process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL;
 if (!DATABASE_URL) {
-  throw new Error("FIREBASE_DATABASE_URL environment variable is missing.");
+  throw new Error('FIREBASE_DATABASE_URL environment variable is missing.');
 }
 
 const ENV_SERVICE_ACCOUNT: Partial<ServiceAccount> = {
   projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
   clientEmail: process.env.FIREBASE_ADMIN_CLIENT_EMAIL,
-  privateKey: process.env.FIREBASE_ADMIN_PRIVATE_KEY?.replace(/\\n/g, "\n"),
+  privateKey: process.env.FIREBASE_ADMIN_PRIVATE_KEY?.replace(/\\n/g, '\n'),
 };
 
 if (!getApps().length) {
@@ -30,7 +30,7 @@ if (!getApps().length) {
       !ENV_SERVICE_ACCOUNT.privateKey
     ) {
       throw new Error(
-        "Missing Firebase admin service account environment variables",
+        'Missing Firebase admin service account environment variables',
       );
     }
 
@@ -49,14 +49,14 @@ if (!getApps().length) {
       projectId: serviceAccount.projectId,
     });
 
-    Logger.info("firebase-admin", "Initialized Firebase Admin SDK", {
+    Logger.info('firebase-admin', 'Initialized Firebase Admin SDK', {
       projectId: serviceAccount.projectId,
       clientEmail: serviceAccount.clientEmail,
     });
   } catch (error) {
     Logger.error(
-      "firebase-admin",
-      "Falling back to Application Default Credentials",
+      'firebase-admin',
+      'Falling back to Application Default Credentials',
       {
         error: (error as Error).message,
       },

@@ -14,13 +14,21 @@ import {
   formatDailyDateKey,
 } from "@/lib/api/quizzes";
 import type {
+  CreateCourseQuizInput,
   CreateDailyQuizInput,
+  CreateLessonQuizInput,
   CreateStandardQuizInput,
   CreateStudyQuizInput,
   QuizDoc,
   UpdateQuizInput,
   WithId,
 } from "@/lib/api/quizzes";
+import type { CourseOption } from "@/lib/api/courses";
+import type { LessonOption } from "@/lib/api/lessons";
+import { lessonQuizId } from "@/lib/api/quizzes";
+
+/** Lesson ids repeat across courses, so the picker keys on both. */
+const lessonKeyOf = (l: LessonOption) => `${l.courseId}::${l.id}`;
 import type { QuizCategory, WithId as WithCatId } from "@/lib/api/quizCategories";
 import type { BibleStudy, WithId as WithStudyId } from "@/lib/api/bibleStudies";
 
@@ -47,12 +55,18 @@ export default function QuizFormModal({
   initial,
   categories,
   bibleStudies,
+  lessons,
+  courses,
   existingDailyDates,
   existingStudyIds,
+  existingLessonQuizIds,
+  existingCourseIds,
   onClose,
   onCreateStandard,
   onCreateDaily,
   onCreateStudy,
+  onCreateLesson,
+  onCreateCourse,
   onEdit,
 }: {
   open: boolean;
@@ -60,12 +74,18 @@ export default function QuizFormModal({
   initial?: Partial<WithId<QuizDoc>>;
   categories: WithCatId<QuizCategory>[];
   bibleStudies: WithStudyId<BibleStudy>[];
+  lessons: LessonOption[];
+  courses: CourseOption[];
   existingDailyDates: Set<string>;
   existingStudyIds: Set<string>;
+  existingLessonQuizIds: Set<string>;
+  existingCourseIds: Set<string>;
   onClose: () => void;
   onCreateStandard: (payload: CreateStandardQuizInput) => Promise<void> | void;
   onCreateDaily: (payload: CreateDailyQuizInput) => Promise<void> | void;
   onCreateStudy: (payload: CreateStudyQuizInput) => Promise<void> | void;
+  onCreateLesson: (payload: CreateLessonQuizInput) => Promise<void> | void;
+  onCreateCourse: (payload: CreateCourseQuizInput) => Promise<void> | void;
   onEdit: (id: string, payload: UpdateQuizInput) => Promise<void> | void;
 }) {
   const [kind, setKind] = useState<QuizKind>(QuizKind.Standard);
@@ -78,6 +98,10 @@ export default function QuizFormModal({
   );
   const [dailyDate, setDailyDate] = useState<string>(todayDateInputValue());
   const [studyId, setStudyId] = useState<string>("");
+  // A lesson id is only unique within its course, so the picker is keyed
+  // by `${courseId}::${lessonId}`.
+  const [lessonKey, setLessonKey] = useState<string>("");
+  const [courseId, setCourseId] = useState<string>("");
   const [requiresVerseRead, setRequiresVerseRead] = useState(true);
 
   useEffect(() => {
@@ -90,6 +114,8 @@ export default function QuizFormModal({
     setDificultyLevel(initial?.dificultyLevel ?? DifficultyLevel.Any);
     setDailyDate(todayDateInputValue());
     setStudyId("");
+    setLessonKey("");
+    setCourseId("");
     setRequiresVerseRead(initial?.requiresVerseRead ?? true);
   }, [open, initial]);
 
@@ -101,12 +127,38 @@ export default function QuizFormModal({
   const isStandard = kind === QuizKind.Standard;
   const isDaily = kind === QuizKind.Daily;
   const isStudy = kind === QuizKind.Study;
+  const isLesson = kind === QuizKind.Lesson;
+  const isCourse = kind === QuizKind.Course;
 
   const dailyDateTaken =
     !isEdit && isDaily && !!dailyDate && existingDailyDates.has(dailyDate);
 
   const studyIdTaken =
     !isEdit && isStudy && !!studyId && existingStudyIds.has(studyId);
+
+  const selectedLesson = useMemo(
+    () => lessons.find((l) => lessonKeyOf(l) === lessonKey) ?? null,
+    [lessons, lessonKey],
+  );
+
+  const derivedLessonQuizId = selectedLesson
+    ? lessonQuizId(selectedLesson.courseId, selectedLesson.id)
+    : "";
+
+  const lessonIdTaken =
+    !isEdit &&
+    isLesson &&
+    !!derivedLessonQuizId &&
+    existingLessonQuizIds.has(derivedLessonQuizId);
+
+  const courseIdTaken =
+    !isEdit && isCourse && !!courseId && existingCourseIds.has(courseId);
+
+  const courseTitleById = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const c of courses) map[c.id] = c.title || c.id;
+    return map;
+  }, [courses]);
 
   const selectedStudyName = useMemo(() => {
     if (!studyId) return "";
@@ -125,6 +177,14 @@ export default function QuizFormModal({
       if (!studyId) return false;
       if (studyIdTaken) return false;
     }
+    if (!isEdit && isLesson) {
+      if (!selectedLesson) return false;
+      if (lessonIdTaken) return false;
+    }
+    if (!isEdit && isCourse) {
+      if (!courseId) return false;
+      if (courseIdTaken) return false;
+    }
     return true;
   }, [
     title,
@@ -134,10 +194,16 @@ export default function QuizFormModal({
     isStandard,
     isDaily,
     isStudy,
+    isLesson,
+    isCourse,
     dailyDate,
     dailyDateTaken,
     studyId,
     studyIdTaken,
+    selectedLesson,
+    lessonIdTaken,
+    courseId,
+    courseIdTaken,
   ]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -174,6 +240,37 @@ export default function QuizFormModal({
           ageGroup,
           dificultyLevel,
           studyId,
+        });
+        return;
+      }
+
+      if (isLesson) {
+        if (!selectedLesson) throw new Error("Pick a lesson for the lesson quiz");
+        if (existingLessonQuizIds.has(derivedLessonQuizId)) {
+          throw new Error("A quiz already exists for this lesson");
+        }
+        await onCreateLesson({
+          title: title.trim(),
+          description: description.trim(),
+          ageGroup,
+          dificultyLevel,
+          lessonId: selectedLesson.id,
+          courseId: selectedLesson.courseId,
+        });
+        return;
+      }
+
+      if (isCourse) {
+        if (!courseId) throw new Error("Pick a course for the course quiz");
+        if (existingCourseIds.has(courseId)) {
+          throw new Error("A final quiz already exists for this course");
+        }
+        await onCreateCourse({
+          title: title.trim(),
+          description: description.trim(),
+          ageGroup,
+          dificultyLevel,
+          courseId,
         });
         return;
       }
@@ -253,6 +350,12 @@ export default function QuizFormModal({
                 <option value={QuizKind.Study}>
                   {QUIZ_KIND_LABELS[QuizKind.Study]}
                 </option>
+                <option value={QuizKind.Lesson}>
+                  {QUIZ_KIND_LABELS[QuizKind.Lesson]}
+                </option>
+                <option value={QuizKind.Course}>
+                  {QUIZ_KIND_LABELS[QuizKind.Course]}
+                </option>
               </select>
             )}
           </div>
@@ -293,6 +396,89 @@ export default function QuizFormModal({
                   <span className="font-medium text-primary-800">
                     {selectedStudyName}
                   </span>
+                </p>
+              ) : null}
+            </div>
+          )}
+
+          {!isEdit && isLesson && (
+            <div>
+              <label className="block text-sm font-medium text-primary-800">
+                Lesson
+              </label>
+              <select
+                value={lessonKey}
+                onChange={(e) => setLessonKey(e.target.value)}
+                className={`mt-1 block w-full rounded-md border bg-white px-3 py-2 focus:outline-none focus:ring-2 ${
+                  lessonIdTaken
+                    ? "border-red-400 focus:ring-red-500"
+                    : "border-primary-300 focus:ring-primary-500"
+                }`}
+                required
+              >
+                <option value="">Select lesson</option>
+                {lessons.map((l) => (
+                  <option key={lessonKeyOf(l)} value={lessonKeyOf(l)}>
+                    {courseTitleById[l.courseId]
+                      ? `${courseTitleById[l.courseId]} · `
+                      : ""}
+                    {l.order ? `${l.order}. ` : ""}
+                    {l.title || l.id}
+                  </option>
+                ))}
+              </select>
+              {lessons.length === 0 ? (
+                <p className="mt-1 text-xs text-primary-600">
+                  No lessons found under any{" "}
+                  <code>courses/&#123;id&#125;/lessons</code>.
+                </p>
+              ) : lessonIdTaken ? (
+                <p className="mt-1 text-xs text-red-600">
+                  A quiz already exists for this lesson. Pick another.
+                </p>
+              ) : derivedLessonQuizId ? (
+                <p className="mt-1 text-xs text-primary-600">
+                  Document id will be{" "}
+                  <code className="font-mono">{derivedLessonQuizId}</code>
+                </p>
+              ) : null}
+            </div>
+          )}
+
+          {!isEdit && isCourse && (
+            <div>
+              <label className="block text-sm font-medium text-primary-800">
+                Course
+              </label>
+              <select
+                value={courseId}
+                onChange={(e) => setCourseId(e.target.value)}
+                className={`mt-1 block w-full rounded-md border bg-white px-3 py-2 focus:outline-none focus:ring-2 ${
+                  courseIdTaken
+                    ? "border-red-400 focus:ring-red-500"
+                    : "border-primary-300 focus:ring-primary-500"
+                }`}
+                required
+              >
+                <option value="">Select course</option>
+                {courses.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.title || c.id}
+                  </option>
+                ))}
+              </select>
+              {courses.length === 0 ? (
+                <p className="mt-1 text-xs text-primary-600">
+                  No courses found in <code>courses</code>.
+                </p>
+              ) : courseIdTaken ? (
+                <p className="mt-1 text-xs text-red-600">
+                  A final quiz already exists for this course. Pick another.
+                </p>
+              ) : courseId ? (
+                <p className="mt-1 text-xs text-primary-600">
+                  Document id will be{" "}
+                  <code className="font-mono">course-{courseId}</code>
                 </p>
               ) : null}
             </div>

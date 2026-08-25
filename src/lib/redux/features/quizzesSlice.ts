@@ -1,6 +1,8 @@
 import { createAsyncThunk, createSlice, PayloadAction } from '@reduxjs/toolkit';
 import {
+  addCourseQuiz,
   addDailyQuiz,
+  addLessonQuiz,
   addStandardQuiz,
   addStudyQuiz,
   deleteQuiz,
@@ -9,7 +11,9 @@ import {
   updateQuiz,
 } from '@/lib/api/quizzes';
 import type {
+  CreateCourseQuizInput,
   CreateDailyQuizInput,
+  CreateLessonQuizInput,
   CreateStandardQuizInput,
   CreateStudyQuizInput,
   QuizDoc,
@@ -53,6 +57,22 @@ export const createStudyQuiz = createAsyncThunk(
   'quizzes/createStudy',
   async (payload: CreateStudyQuizInput, { dispatch }) => {
     await addStudyQuiz(payload);
+    await dispatch(fetchQuizzes());
+  },
+);
+
+export const createLessonQuiz = createAsyncThunk(
+  'quizzes/createLesson',
+  async (payload: CreateLessonQuizInput, { dispatch }) => {
+    await addLessonQuiz(payload);
+    await dispatch(fetchQuizzes());
+  },
+);
+
+export const createCourseQuiz = createAsyncThunk(
+  'quizzes/createCourse',
+  async (payload: CreateCourseQuizInput, { dispatch }) => {
+    await addCourseQuiz(payload);
     await dispatch(fetchQuizzes());
   },
 );
@@ -109,6 +129,12 @@ const quizzesSlice = createSlice({
         state.error = action.error.message || 'Create failed';
       })
       .addCase(createStudyQuiz.rejected, (state, action) => {
+        state.error = action.error.message || 'Create failed';
+      })
+      .addCase(createLessonQuiz.rejected, (state, action) => {
+        state.error = action.error.message || 'Create failed';
+      })
+      .addCase(createCourseQuiz.rejected, (state, action) => {
         state.error = action.error.message || 'Create failed';
       })
       .addCase(editQuiz.rejected, (state, action) => {

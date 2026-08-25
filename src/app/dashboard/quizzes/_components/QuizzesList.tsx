@@ -64,7 +64,11 @@ export default function QuizzesList({
                     ? "bg-amber-100 text-amber-800"
                     : it.kind === QuizKind.Study
                       ? "bg-sky-100 text-sky-800"
-                      : "bg-primary-100 text-primary-700"
+                      : it.kind === QuizKind.Lesson
+                        ? "bg-violet-100 text-violet-800"
+                        : it.kind === QuizKind.Course
+                          ? "bg-indigo-100 text-indigo-800"
+                          : "bg-primary-100 text-primary-700"
                 }`}
               >
                 {QUIZ_KIND_LABELS[it.kind]}
