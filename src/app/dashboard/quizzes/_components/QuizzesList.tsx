@@ -1,6 +1,7 @@
 "use client";
 
 import AppButton, { AppButtonVariant } from "@/components/ui/AppButton";
+import { EmptyGrid } from "@/components/ui/PagedGridPage";
 import {
   AGE_GROUP_LABELS,
   DIFFICULTY_LEVEL_LABELS,
@@ -39,6 +40,8 @@ export default function QuizzesList({
   onPublish: (it: WithId<QuizDoc>) => void;
   onOpenQuestions: (it: WithId<QuizDoc>) => void;
 }) {
+  if (items.length === 0) return <EmptyGrid>No quizzes yet.</EmptyGrid>;
+
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 items-start">
       {items.map((it) => (
@@ -160,11 +163,6 @@ export default function QuizzesList({
           </div>
         </div>
       ))}
-      {items.length === 0 && (
-        <div className="col-span-full text-center text-primary-600 py-8">
-          No quizzes yet.
-        </div>
-      )}
     </div>
   );
 }

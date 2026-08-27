@@ -1,6 +1,7 @@
 'use client';
 
 import AppButton, { AppButtonVariant } from '@/components/ui/AppButton';
+import { EmptyGrid } from '@/components/ui/PagedGridPage';
 import type { WithId, VideoDoc } from '@/lib/api/videos';
 import { videoWatchUrl } from '@/lib/api/videos';
 import { BellIcon } from '@heroicons/react/24/outline';
@@ -52,10 +53,10 @@ export default function VideosList({
   }
 
   if (loading && items.length === 0) {
-    return (
-      <div className='py-8 text-center text-primary-600'>Loading videos…</div>
-    );
+    return <EmptyGrid>Loading videos…</EmptyGrid>;
   }
+
+  if (items.length === 0) return <EmptyGrid>No videos yet.</EmptyGrid>;
 
   return (
     <div className='grid grid-cols-1 items-start gap-4 sm:grid-cols-2 lg:grid-cols-3'>
@@ -150,12 +151,6 @@ export default function VideosList({
           </div>
         );
       })}
-
-      {items.length === 0 && (
-        <div className='col-span-full py-8 text-center text-primary-600'>
-          No videos found.
-        </div>
-      )}
     </div>
   );
 }

@@ -5,6 +5,9 @@ import toast from "react-hot-toast";
 import { useAppDispatch, useAppSelector } from "@/lib/redux/store";
 import { fetchUsers, editUser } from "@/lib/redux/features/usersSlice";
 import type { WithId, UserDoc } from "@/lib/api/users";
+import Pagination from "@/components/ui/Pagination";
+import PagedGridPage from "@/components/ui/PagedGridPage";
+import { usePagedItems } from "@/lib/hooks/usePagedItems";
 import UsersList from "./_components/UsersList";
 import UsersFormModal from "./_components/UsersFormModal";
 
@@ -51,14 +54,29 @@ export default function UsersClient() {
     }
   };
 
-  return (
-    <div className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h2 className="text-xl font-semibold text-primary-800">Users</h2>
-        <div className="flex items-center gap-3" />
-      </div>
+  const { pageItems, paginationProps } = usePagedItems(items, {
+    pageSize: 10,
+    pageSizeOptions: [10, 25, 50, 100],
+  });
 
-      <UsersList items={items} loading={loading} onEdit={openEdit} />
+  return (
+    <>
+      <PagedGridPage
+        toolbar={
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-xl font-semibold text-primary-800">Users</h2>
+              <p className="text-sm text-primary-700">
+                Manage users of the church app.
+              </p>
+            </div>
+            <div className="flex items-center gap-3" />
+          </div>
+        }
+        pager={<Pagination {...paginationProps} />}
+      >
+        <UsersList items={pageItems} loading={loading} onEdit={openEdit} />
+      </PagedGridPage>
 
       <UsersFormModal
         open={isModalOpen}
@@ -66,6 +84,6 @@ export default function UsersClient() {
         onClose={closeModal}
         onSubmit={handleSubmit}
       />
-    </div>
+    </>
   );
 }

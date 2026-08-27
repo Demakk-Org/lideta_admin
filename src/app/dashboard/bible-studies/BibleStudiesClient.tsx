@@ -6,6 +6,9 @@ import { useAppDispatch, useAppSelector } from "@/lib/redux/store";
 import AppModal from "@/components/ui/AppModal";
 import ConfirmDeleteModal from "@/components/ui/ConfirmDeleteModal";
 import AppButton, { AppButtonVariant } from "@/components/ui/AppButton";
+import Pagination from "@/components/ui/Pagination";
+import PagedGridPage, { EmptyGrid } from "@/components/ui/PagedGridPage";
+import { usePagedItems } from "@/lib/hooks/usePagedItems";
 import {
   createBibleStudy,
   editBibleStudy,
@@ -37,6 +40,8 @@ function StudiesList({
   onDelete: (id: string) => void;
   onManagePlans: (it: WithId<BibleStudy>) => void;
 }) {
+  if (items.length === 0) return <EmptyGrid>No bible studies yet.</EmptyGrid>;
+
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 items-start">
       {items.map((it) => (
@@ -108,11 +113,6 @@ function StudiesList({
           </div>
         </div>
       ))}
-      {items.length === 0 && (
-        <div className="col-span-full text-center text-primary-600 py-8">
-          No bible studies yet.
-        </div>
-      )}
     </div>
   );
 }
@@ -229,26 +229,35 @@ export default function BibleStudiesClient() {
     }
   };
 
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold text-primary-800">Bible Studies</h2>
-        <AppButton
-          variant={AppButtonVariant.Add}
-          onClick={openAdd}
-          disabled={loading}
-        >
-          Add Study
-        </AppButton>
-      </div>
+  const { pageItems, paginationProps } = usePagedItems(items);
 
-      <StudiesList
-        items={items}
-        categoryTitleById={categoryTitleById}
-        onEdit={openEdit}
-        onDelete={onDelete}
-        onManagePlans={(it) => setPlansStudy(it)}
-      />
+  return (
+    <>
+      <PagedGridPage
+        toolbar={
+          <>
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-semibold text-primary-800">Bible Studies</h2>
+            <AppButton
+              variant={AppButtonVariant.Add}
+              onClick={openAdd}
+              disabled={loading}
+            >
+              Add Study
+            </AppButton>
+          </div>
+          </>
+        }
+        pager={<Pagination {...paginationProps} />}
+      >
+        <StudiesList
+          items={pageItems}
+          categoryTitleById={categoryTitleById}
+          onEdit={openEdit}
+          onDelete={onDelete}
+          onManagePlans={(it) => setPlansStudy(it)}
+        />
+      </PagedGridPage>
 
       <AppModal
         open={isModalOpen}
@@ -356,6 +365,6 @@ export default function BibleStudiesClient() {
         confirmLabel={isDeleting ? "Deleting..." : "Delete"}
         disabled={isDeleting}
       />
-    </div>
+    </>
   );
 }

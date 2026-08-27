@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 import AppButton, { AppButtonVariant } from "@/components/ui/AppButton";
 import AppModal from "@/components/ui/AppModal";
 import DevicePreviewSelector, {
@@ -9,7 +9,7 @@ import DevicePreviewSelector, {
   type PreviewDevice,
 } from "@/components/ui/DevicePreviewSelector";
 import NotifyButton from "@/components/ui/NotifyButton";
-import Pagination from "@/components/ui/Pagination";
+import { EmptyGrid } from "@/components/ui/PagedGridPage";
 import type { WithId, NewsDoc, NewsContentItem, NewsQuoteValue } from "@/lib/api/news";
 import type { WithId as WithUserId, UserDoc } from "@/lib/api/users";
 import { NewsContentType } from "@/lib/api/news";
@@ -122,27 +122,16 @@ export default function NewsList({
   const selectable = typeof onToggleSelect === "function";
   const selected = new Set(selectedIds ?? []);
 
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(9);
   const [detail, setDetail] = useState<WithId<NewsDoc> | null>(null);
   const [device, setDevice] = useState<PreviewDevice>(DEFAULT_PREVIEW_DEVICE);
 
-  const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
-
-  // Keep the page in range when the list shrinks or the page size changes.
-  useEffect(() => {
-    if (page > totalPages) setPage(totalPages);
-  }, [page, totalPages]);
-
-  const pageItems = useMemo(
-    () => items.slice((page - 1) * pageSize, page * pageSize),
-    [items, page, pageSize]
-  );
-
   return (
-    <div className="space-y-4">
+    <>
+      {items.length === 0 ? (
+        <EmptyGrid>No news yet.</EmptyGrid>
+      ) : (
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 items-start">
-        {pageItems.map((it) => (
+        {items.map((it) => (
           <div
             key={it.id}
             className={`rounded-md border bg-white p-4 shadow-sm ${
@@ -218,25 +207,7 @@ export default function NewsList({
             </div>
           </div>
         ))}
-        {items.length === 0 && (
-          <div className="col-span-full text-center text-primary-600 py-8">No news yet.</div>
-        )}
       </div>
-
-      {items.length > 0 && (
-        <div className="rounded-md border border-primary-200 bg-white">
-          <Pagination
-            page={page}
-            pageSize={pageSize}
-            total={items.length}
-            onPageChange={setPage}
-            onPageSizeChange={(size) => {
-              setPageSize(size);
-              setPage(1);
-            }}
-            pageSizeOptions={[9, 18, 36, 72]}
-          />
-        </div>
       )}
 
       <AppModal
@@ -284,6 +255,6 @@ export default function NewsList({
           </div>
         )}
       </AppModal>
-    </div>
+    </>
   );
 }

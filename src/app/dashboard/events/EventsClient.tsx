@@ -4,6 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import { useAppDispatch, useAppSelector } from "@/lib/redux/store";
 import AppButton, { AppButtonVariant } from "@/components/ui/AppButton";
+import Pagination from "@/components/ui/Pagination";
+import PagedGridPage from "@/components/ui/PagedGridPage";
+import { usePagedItems } from "@/lib/hooks/usePagedItems";
 import { fetchEvents, createEvent, editEvent, removeEvent } from "@/lib/redux/features/eventsSlice";
 import { fetchEventCategories } from "@/lib/redux/features/eventCategoriesSlice";
 import type { WithId, EventDoc } from "@/lib/api/events";
@@ -141,66 +144,79 @@ export default function EventsClient() {
     setSelectedIds([]);
   };
 
-  return (
-    <div className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h2 className="text-xl font-semibold text-primary-800">Events</h2>
-        <div className="flex flex-wrap items-center gap-3">
-          {visibleItems.length > 0 && (
-            <>
-              <label className="flex items-center gap-2 text-sm text-primary-700">
-                <input
-                  type="checkbox"
-                  className="h-4 w-4 rounded border-primary-300 accent-red-600"
-                  checked={allSelected}
-                  onChange={toggleSelectAll}
-                />
-                <span>Select all</span>
-              </label>
-              {selectedIds.length > 0 && (
-                <AppButton
-                  variant={AppButtonVariant.Delete}
-                  className="px-3 py-1 text-xs"
-                  onClick={() => setIsBatchDeleteOpen(true)}
-                  disabled={batchDeleting}
-                >
-                  Delete Selected ({selectedIds.length})
-                </AppButton>
-              )}
-            </>
-          )}
-          <label className="text-sm text-primary-700">
-            <span className="mr-2">Filter:</span>
-            <select
-              value={filter}
-              onChange={(e) => setFilter(e.target.value as "all" | "upcoming" | "past")}
-              className="rounded-md border border-primary-300 bg-white px-2 py-1 text-sm"
-            >
-              <option value="all">All</option>
-              <option value="upcoming">Upcoming</option>
-              <option value="past">Past</option>
-            </select>
-          </label>
-          <AppButton variant={AppButtonVariant.Add} onClick={openAdd} disabled={loading}>Add Event</AppButton>
-        </div>
-      </div>
+  const { pageItems, resetPage, paginationProps } = usePagedItems(visibleItems);
 
-      <EventsList
-        items={visibleItems}
-        notifying={notifying}
-        onEdit={openEdit}
-        onDelete={onDelete}
-        onNotify={(it) =>
-          notify({
-            type: "event",
-            id: it.id,
-            title: it.title,
-            imageUrl: it.imageUrl,
-          })
+  useEffect(() => {
+    resetPage();
+  }, [filter, resetPage]);
+
+  return (
+    <>
+      <PagedGridPage
+        toolbar={
+          <>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <h2 className="text-xl font-semibold text-primary-800">Events</h2>
+            <div className="flex flex-wrap items-center gap-3">
+              {visibleItems.length > 0 && (
+                <>
+                  <label className="flex items-center gap-2 text-sm text-primary-700">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 rounded border-primary-300 accent-red-600"
+                      checked={allSelected}
+                      onChange={toggleSelectAll}
+                    />
+                    <span>Select all</span>
+                  </label>
+                  {selectedIds.length > 0 && (
+                    <AppButton
+                      variant={AppButtonVariant.Delete}
+                      className="px-3 py-1 text-xs"
+                      onClick={() => setIsBatchDeleteOpen(true)}
+                      disabled={batchDeleting}
+                    >
+                      Delete Selected ({selectedIds.length})
+                    </AppButton>
+                  )}
+                </>
+              )}
+              <label className="text-sm text-primary-700">
+                <span className="mr-2">Filter:</span>
+                <select
+                  value={filter}
+                  onChange={(e) => setFilter(e.target.value as "all" | "upcoming" | "past")}
+                  className="rounded-md border border-primary-300 bg-white px-2 py-1 text-sm"
+                >
+                  <option value="all">All</option>
+                  <option value="upcoming">Upcoming</option>
+                  <option value="past">Past</option>
+                </select>
+              </label>
+              <AppButton variant={AppButtonVariant.Add} onClick={openAdd} disabled={loading}>Add Event</AppButton>
+            </div>
+          </div>
+          </>
         }
-        selectedIds={selectedIds}
-        onToggleSelect={toggleSelect}
-      />
+        pager={<Pagination {...paginationProps} />}
+      >
+        <EventsList
+          items={pageItems}
+          notifying={notifying}
+          onEdit={openEdit}
+          onDelete={onDelete}
+          onNotify={(it) =>
+            notify({
+              type: "event",
+              id: it.id,
+              title: it.title,
+              imageUrl: it.imageUrl,
+            })
+          }
+          selectedIds={selectedIds}
+          onToggleSelect={toggleSelect}
+        />
+      </PagedGridPage>
 
       <EventsFormModal
         open={isModalOpen}
@@ -231,6 +247,6 @@ export default function EventsClient() {
         confirmLabel={batchDeleting ? "Deleting..." : "Delete All"}
         disabled={batchDeleting}
       />
-    </div>
+    </>
   );
 }

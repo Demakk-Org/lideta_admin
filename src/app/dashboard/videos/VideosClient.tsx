@@ -4,6 +4,9 @@ import { useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { useAppDispatch, useAppSelector } from '@/lib/redux/store';
 import AppButton, { AppButtonVariant } from '@/components/ui/AppButton';
+import Pagination from '@/components/ui/Pagination';
+import PagedGridPage from '@/components/ui/PagedGridPage';
+import { usePagedItems } from '@/lib/hooks/usePagedItems';
 import ConfirmDeleteModal from '@/components/ui/ConfirmDeleteModal';
 import {
   fetchVideos,
@@ -183,56 +186,69 @@ export default function VideosClient() {
     }
   };
 
+  const { pageItems, resetPage, paginationProps } = usePagedItems(visibleItems);
+
+  useEffect(() => {
+    resetPage();
+  }, [typeFilter, search, resetPage]);
+
   return (
-    <div className='space-y-4'>
-      <div className='flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
-        <h2 className='text-xl font-semibold text-primary-800'>Videos</h2>
-        <div className='flex items-center gap-3'>
-          <AppButton
-            variant={AppButtonVariant.Add}
-            onClick={openAdd}
-            disabled={loading}
-          >
-            Add Video
-          </AppButton>
-        </div>
-      </div>
+    <>
+      <PagedGridPage
+        toolbar={
+          <>
+          <div className='flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
+            <h2 className='text-xl font-semibold text-primary-800'>Videos</h2>
+            <div className='flex items-center gap-3'>
+              <AppButton
+                variant={AppButtonVariant.Add}
+                onClick={openAdd}
+                disabled={loading}
+              >
+                Add Video
+              </AppButton>
+            </div>
+          </div>
 
-      <div className='flex flex-col gap-3 sm:flex-row sm:items-center'>
-        <div className='inline-flex rounded-md border border-primary-300 bg-white p-1'>
-          {(['all', 'youtube', 'hosted'] as const).map((t) => (
-            <button
-              key={t}
-              type='button'
-              onClick={() => setTypeFilter(t)}
-              aria-pressed={typeFilter === t}
-              className={`rounded cursor-pointer px-3 py-1.5 text-sm font-medium transition-colors ${
-                typeFilter === t
-                  ? 'bg-gray-600 text-white'
-                  : 'text-primary-700 hover:bg-primary-50'
-              }`}
-            >
-              {t === 'all' ? 'All' : t === 'youtube' ? 'YouTube' : 'Hosted'}
-            </button>
-          ))}
-        </div>
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className={`${inputClass} sm:max-w-xs`}
-          placeholder='Search by title or uploader'
+          <div className='flex flex-col gap-3 sm:flex-row sm:items-center'>
+            <div className='inline-flex rounded-md border border-primary-300 bg-white p-1'>
+              {(['all', 'youtube', 'hosted'] as const).map((t) => (
+                <button
+                  key={t}
+                  type='button'
+                  onClick={() => setTypeFilter(t)}
+                  aria-pressed={typeFilter === t}
+                  className={`rounded cursor-pointer px-3 py-1.5 text-sm font-medium transition-colors ${
+                    typeFilter === t
+                      ? 'bg-gray-600 text-white'
+                      : 'text-primary-700 hover:bg-primary-50'
+                  }`}
+                >
+                  {t === 'all' ? 'All' : t === 'youtube' ? 'YouTube' : 'Hosted'}
+                </button>
+              ))}
+            </div>
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className={`${inputClass} sm:max-w-xs`}
+              placeholder='Search by title or uploader'
+            />
+          </div>
+          </>
+        }
+        pager={<Pagination {...paginationProps} />}
+      >
+        <VideosList
+          items={pageItems}
+          loading={loading}
+          notifying={notifying}
+          error={status === 'failed' ? error || 'Failed to load videos' : null}
+          onEdit={openEdit}
+          onDelete={onDelete}
+          onNotify={onNotify}
         />
-      </div>
-
-      <VideosList
-        items={visibleItems}
-        loading={loading}
-        notifying={notifying}
-        error={status === 'failed' ? error || 'Failed to load videos' : null}
-        onEdit={openEdit}
-        onDelete={onDelete}
-        onNotify={onNotify}
-      />
+      </PagedGridPage>
 
       <VideoFormModal
         open={isModalOpen}
@@ -253,6 +269,6 @@ export default function VideosClient() {
         onConfirm={confirmDelete}
         confirmLabel='Delete'
       />
-    </div>
+    </>
   );
 }

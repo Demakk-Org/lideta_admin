@@ -6,6 +6,9 @@ import { useAppDispatch, useAppSelector } from "@/lib/redux/store";
 import AppModal from "@/components/ui/AppModal";
 import ConfirmDeleteModal from "@/components/ui/ConfirmDeleteModal";
 import AppButton, { AppButtonVariant } from "@/components/ui/AppButton";
+import Pagination from "@/components/ui/Pagination";
+import PagedGridPage, { EmptyGrid } from "@/components/ui/PagedGridPage";
+import { usePagedItems } from "@/lib/hooks/usePagedItems";
 import FileUploadButton from "@/components/ui/FileUploadButton";
 import { uploadBibleStudyImage } from "@/lib/api/storage";
 import {
@@ -251,101 +254,109 @@ export default function BibleStudyGroupsClient() {
     }
   };
 
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold text-primary-800">
-          Bible Study Groups
-        </h2>
-        <AppButton
-          variant={AppButtonVariant.Add}
-          onClick={openAdd}
-          disabled={loading}
-        >
-          Add Group
-        </AppButton>
-      </div>
+  const { pageItems, paginationProps } = usePagedItems(items);
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 items-start">
-        {items.map((it) => (
-          <div
-            key={it.id}
-            className="rounded-md border border-primary-200 bg-white p-4 shadow-sm"
-          >
-            <div className="flex items-start gap-3">
-              {it.groupImageUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={it.groupImageUrl}
-                  alt={it.groupName}
-                  className="h-12 w-12 shrink-0 rounded object-cover border"
-                />
-              ) : (
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded border border-primary-200 bg-primary-50 text-xs text-primary-500">
-                  No img
+  return (
+    <>
+      <PagedGridPage
+        toolbar={
+          <>
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-semibold text-primary-800">
+              Bible Study Groups
+            </h2>
+            <AppButton
+              variant={AppButtonVariant.Add}
+              onClick={openAdd}
+              disabled={loading}
+            >
+              Add Group
+            </AppButton>
+          </div>
+          </>
+        }
+        pager={<Pagination {...paginationProps} />}
+      >
+        {items.length === 0 ? (
+          <EmptyGrid>No bible study groups yet.</EmptyGrid>
+        ) : (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 items-start">
+          {pageItems.map((it) => (
+            <div
+              key={it.id}
+              className="rounded-md border border-primary-200 bg-white p-4 shadow-sm"
+            >
+              <div className="flex items-start gap-3">
+                {it.groupImageUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={it.groupImageUrl}
+                    alt={it.groupName}
+                    className="h-12 w-12 shrink-0 rounded object-cover border"
+                  />
+                ) : (
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded border border-primary-200 bg-primary-50 text-xs text-primary-500">
+                    No img
+                  </div>
+                )}
+                <div className="min-w-0">
+                  <h3 className="truncate text-base font-semibold text-primary-900">
+                    {it.groupName}
+                  </h3>
+                  <p className="truncate text-xs text-primary-600">
+                    Leader: {userLabel[it.leaderUserId] ?? (it.leaderUserId || "—")}
+                  </p>
                 </div>
-              )}
-              <div className="min-w-0">
-                <h3 className="truncate text-base font-semibold text-primary-900">
-                  {it.groupName}
-                </h3>
-                <p className="truncate text-xs text-primary-600">
-                  Leader: {userLabel[it.leaderUserId] ?? (it.leaderUserId || "—")}
-                </p>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-1 text-[11px]">
+                <span className="rounded bg-primary-50 px-2 py-0.5 text-primary-700">
+                  {AGE_GROUP_LABELS[it.ageGroup]}
+                </span>
+                <span className="rounded bg-primary-50 px-2 py-0.5 text-primary-700">
+                  {GENDER_GROUP_LABELS[it.genderGroup]}
+                </span>
+                <span className="rounded bg-primary-50 px-2 py-0.5 text-primary-700">
+                  {it.membersUserIds.length} members
+                </span>
+                <span
+                  className={`rounded px-2 py-0.5 ${
+                    it.isActive
+                      ? "bg-emerald-100 text-emerald-800"
+                      : "bg-gray-200 text-gray-700"
+                  }`}
+                >
+                  {it.isActive ? "Active" : "Inactive"}
+                </span>
+                {it.isRecruiting && (
+                  <span className="rounded bg-amber-100 px-2 py-0.5 text-amber-800">
+                    Recruiting
+                  </span>
+                )}
+              </div>
+              <p className="mt-2 break-all text-[11px] text-primary-500">
+                id: {it.id}
+              </p>
+              <div className="mt-4 flex justify-end gap-2">
+                <AppButton
+                  variant={AppButtonVariant.Edit}
+                  className="px-3 py-1 text-xs"
+                  onClick={() => openEdit(it)}
+                >
+                  Edit
+                </AppButton>
+                <AppButton
+                  variant={AppButtonVariant.Delete}
+                  className="px-3 py-1 text-xs"
+                  onClick={() => onDelete(it.id)}
+                >
+                  Delete
+                </AppButton>
               </div>
             </div>
-            <div className="mt-3 flex flex-wrap gap-1 text-[11px]">
-              <span className="rounded bg-primary-50 px-2 py-0.5 text-primary-700">
-                {AGE_GROUP_LABELS[it.ageGroup]}
-              </span>
-              <span className="rounded bg-primary-50 px-2 py-0.5 text-primary-700">
-                {GENDER_GROUP_LABELS[it.genderGroup]}
-              </span>
-              <span className="rounded bg-primary-50 px-2 py-0.5 text-primary-700">
-                {it.membersUserIds.length} members
-              </span>
-              <span
-                className={`rounded px-2 py-0.5 ${
-                  it.isActive
-                    ? "bg-emerald-100 text-emerald-800"
-                    : "bg-gray-200 text-gray-700"
-                }`}
-              >
-                {it.isActive ? "Active" : "Inactive"}
-              </span>
-              {it.isRecruiting && (
-                <span className="rounded bg-amber-100 px-2 py-0.5 text-amber-800">
-                  Recruiting
-                </span>
-              )}
-            </div>
-            <p className="mt-2 break-all text-[11px] text-primary-500">
-              id: {it.id}
-            </p>
-            <div className="mt-4 flex justify-end gap-2">
-              <AppButton
-                variant={AppButtonVariant.Edit}
-                className="px-3 py-1 text-xs"
-                onClick={() => openEdit(it)}
-              >
-                Edit
-              </AppButton>
-              <AppButton
-                variant={AppButtonVariant.Delete}
-                className="px-3 py-1 text-xs"
-                onClick={() => onDelete(it.id)}
-              >
-                Delete
-              </AppButton>
-            </div>
-          </div>
-        ))}
-        {items.length === 0 && (
-          <div className="col-span-full text-center text-primary-600 py-8">
-            No bible study groups yet.
-          </div>
+          ))}
+        </div>
         )}
-      </div>
+      </PagedGridPage>
 
       <AppModal
         open={isModalOpen}
@@ -682,6 +693,6 @@ export default function BibleStudyGroupsClient() {
         confirmLabel={isDeleting ? "Deleting..." : "Delete"}
         disabled={isDeleting}
       />
-    </div>
+    </>
   );
 }

@@ -4,6 +4,9 @@ import { useCallback, useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { useAppDispatch, useAppSelector } from "@/lib/redux/store";
 import { AppButtonVariant } from "@/components/ui/AppButton";
+import Pagination from "@/components/ui/Pagination";
+import PagedGridPage from "@/components/ui/PagedGridPage";
+import { usePagedItems } from "@/lib/hooks/usePagedItems";
 import ConfirmDeleteModal from "@/components/ui/ConfirmDeleteModal";
 import BiblesHeader from "./_components/BiblesHeader";
 import BiblesList from "./_components/BiblesList";
@@ -139,9 +142,24 @@ export default function BiblesClient() {
   const submitLabel = editingId ? "Update Bible" : "Add Bible";
   const submitVariant = editingId ? AppButtonVariant.Edit : AppButtonVariant.Add;
 
+  const { pageItems, paginationProps } = usePagedItems(items, {
+    pageSize: 10,
+    pageSizeOptions: [10, 25, 50, 100],
+  });
+
   return (
-    <div className="space-y-6">
-      <BiblesHeader onAdd={openNew} />
+    <>
+      <PagedGridPage
+        toolbar={<BiblesHeader onAdd={openNew} />}
+        pager={<Pagination {...paginationProps} />}
+      >
+        <BiblesList
+          items={pageItems}
+          loading={loading}
+          onEdit={handleEdit}
+          onDelete={handleDelete}
+        />
+      </PagedGridPage>
 
       <BiblesModal
         isOpen={isModalOpen}
@@ -154,7 +172,6 @@ export default function BiblesClient() {
         onClose={closeModal}
       />
 
-      <BiblesList items={items} loading={loading} onEdit={handleEdit} onDelete={handleDelete} />
 
       <ConfirmDeleteModal
         open={isDeleteOpen}
@@ -164,6 +181,6 @@ export default function BiblesClient() {
         }}
         onConfirm={confirmDelete}
       />
-    </div>
+    </>
   );
 }

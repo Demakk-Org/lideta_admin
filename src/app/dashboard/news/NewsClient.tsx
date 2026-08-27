@@ -4,6 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import { useAppDispatch, useAppSelector } from "@/lib/redux/store";
 import AppButton, { AppButtonVariant } from "@/components/ui/AppButton";
+import Pagination from "@/components/ui/Pagination";
+import PagedGridPage from "@/components/ui/PagedGridPage";
+import { usePagedItems } from "@/lib/hooks/usePagedItems";
 import { fetchNews, createNews, editNews, removeNews } from "@/lib/redux/features/newsSlice";
 import { fetchUsers } from "@/lib/redux/features/usersSlice";
 import type { WithId, NewsDoc } from "@/lib/api/news";
@@ -118,55 +121,64 @@ export default function NewsClient() {
     setSelectedIds([]);
   };
 
-  return (
-    <div className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h2 className="text-xl font-semibold text-primary-800">News</h2>
-        <div className="flex flex-wrap items-center gap-3">
-          {items.length > 0 && (
-            <>
-              <label className="flex items-center gap-2 text-sm text-primary-700">
-                <input
-                  type="checkbox"
-                  className="h-4 w-4 rounded border-primary-300 accent-red-600"
-                  checked={allSelected}
-                  onChange={toggleSelectAll}
-                />
-                <span>Select all</span>
-              </label>
-              {selectedIds.length > 0 && (
-                <AppButton
-                  variant={AppButtonVariant.Delete}
-                  className="px-3 py-1 text-xs"
-                  onClick={() => setIsBatchDeleteOpen(true)}
-                  disabled={batchDeleting}
-                >
-                  Delete Selected ({selectedIds.length})
-                </AppButton>
-              )}
-            </>
-          )}
-          <AppButton variant={AppButtonVariant.Add} onClick={openAdd} disabled={loading}>Add News</AppButton>
-        </div>
-      </div>
+  const { pageItems, paginationProps } = usePagedItems(items);
 
-      <NewsList
-        items={items}
-        users={users}
-        notifying={notifying}
-        onEdit={openEdit}
-        onDelete={onDelete}
-        onNotify={(it) =>
-          notify({
-            type: "news",
-            id: it.id,
-            title: it.title,
-            imageUrl: it.imageUrl,
-          })
+  return (
+    <>
+      <PagedGridPage
+        toolbar={
+          <>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <h2 className="text-xl font-semibold text-primary-800">News</h2>
+            <div className="flex flex-wrap items-center gap-3">
+              {items.length > 0 && (
+                <>
+                  <label className="flex items-center gap-2 text-sm text-primary-700">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 rounded border-primary-300 accent-red-600"
+                      checked={allSelected}
+                      onChange={toggleSelectAll}
+                    />
+                    <span>Select all</span>
+                  </label>
+                  {selectedIds.length > 0 && (
+                    <AppButton
+                      variant={AppButtonVariant.Delete}
+                      className="px-3 py-1 text-xs"
+                      onClick={() => setIsBatchDeleteOpen(true)}
+                      disabled={batchDeleting}
+                    >
+                      Delete Selected ({selectedIds.length})
+                    </AppButton>
+                  )}
+                </>
+              )}
+              <AppButton variant={AppButtonVariant.Add} onClick={openAdd} disabled={loading}>Add News</AppButton>
+            </div>
+          </div>
+          </>
         }
-        selectedIds={selectedIds}
-        onToggleSelect={toggleSelect}
-      />
+        pager={<Pagination {...paginationProps} />}
+      >
+        <NewsList
+          items={pageItems}
+          users={users}
+          notifying={notifying}
+          onEdit={openEdit}
+          onDelete={onDelete}
+          onNotify={(it) =>
+            notify({
+              type: "news",
+              id: it.id,
+              title: it.title,
+              imageUrl: it.imageUrl,
+            })
+          }
+          selectedIds={selectedIds}
+          onToggleSelect={toggleSelect}
+        />
+      </PagedGridPage>
 
       <NewsFormModal
         open={isModalOpen}
@@ -197,6 +209,6 @@ export default function NewsClient() {
         confirmLabel={batchDeleting ? "Deleting..." : "Delete All"}
         disabled={batchDeleting}
       />
-    </div>
+    </>
   );
 }

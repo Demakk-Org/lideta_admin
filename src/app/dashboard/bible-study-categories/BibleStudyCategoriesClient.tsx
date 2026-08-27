@@ -6,6 +6,9 @@ import { useAppDispatch, useAppSelector } from "@/lib/redux/store";
 import AppModal from "@/components/ui/AppModal";
 import ConfirmDeleteModal from "@/components/ui/ConfirmDeleteModal";
 import AppButton, { AppButtonVariant } from "@/components/ui/AppButton";
+import Pagination from "@/components/ui/Pagination";
+import PagedGridPage, { EmptyGrid } from "@/components/ui/PagedGridPage";
+import { usePagedItems } from "@/lib/hooks/usePagedItems";
 import FileUploadButton from "@/components/ui/FileUploadButton";
 import { uploadBibleStudyImage } from "@/lib/api/storage";
 import {
@@ -29,6 +32,10 @@ function CategoriesList({
   onEdit: (it: WithId<BibleStudyCategory>) => void;
   onDelete: (id: string) => void;
 }) {
+  if (items.length === 0) {
+    return <EmptyGrid>No bible study categories yet.</EmptyGrid>;
+  }
+
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 items-start">
       {items.map((it) => (
@@ -93,11 +100,6 @@ function CategoriesList({
           </div>
         </div>
       ))}
-      {items.length === 0 && (
-        <div className="col-span-full text-center text-primary-600 py-8">
-          No bible study categories yet.
-        </div>
-      )}
     </div>
   );
 }
@@ -220,33 +222,46 @@ export default function BibleStudyCategoriesClient() {
     }
   };
 
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold text-primary-800">
-          Bible Study Categories
-        </h2>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={handleRecount}
-            disabled={isRecounting || loading}
-            className="inline-flex items-center justify-center rounded-md border border-primary-300 bg-white px-3 py-2 text-sm font-medium text-primary-700 hover:bg-primary-50 disabled:cursor-not-allowed disabled:opacity-60"
-            title="Recompute study counts from the studies collection"
-          >
-            {isRecounting ? "Recounting..." : "Recount"}
-          </button>
-          <AppButton
-            variant={AppButtonVariant.Add}
-            onClick={openAdd}
-            disabled={loading}
-          >
-            Add Category
-          </AppButton>
-        </div>
-      </div>
+  const { pageItems, paginationProps } = usePagedItems(items);
 
-      <CategoriesList items={items} onEdit={openEdit} onDelete={onDelete} />
+  return (
+    <>
+      <PagedGridPage
+        toolbar={
+          <>
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-semibold text-primary-800">
+              Bible Study Categories
+            </h2>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleRecount}
+                disabled={isRecounting || loading}
+                className="inline-flex items-center justify-center rounded-md border border-primary-300 bg-white px-3 py-2 text-sm font-medium text-primary-700 hover:bg-primary-50 disabled:cursor-not-allowed disabled:opacity-60"
+                title="Recompute study counts from the studies collection"
+              >
+                {isRecounting ? "Recounting..." : "Recount"}
+              </button>
+              <AppButton
+                variant={AppButtonVariant.Add}
+                onClick={openAdd}
+                disabled={loading}
+              >
+                Add Category
+              </AppButton>
+            </div>
+          </div>
+          </>
+        }
+        pager={<Pagination {...paginationProps} />}
+      >
+        <CategoriesList
+          items={pageItems}
+          onEdit={openEdit}
+          onDelete={onDelete}
+        />
+      </PagedGridPage>
 
       <AppModal
         open={isModalOpen}
@@ -364,6 +379,6 @@ export default function BibleStudyCategoriesClient() {
         confirmLabel={isDeleting ? "Deleting..." : "Delete"}
         disabled={isDeleting}
       />
-    </div>
+    </>
   );
 }

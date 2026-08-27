@@ -2,6 +2,7 @@
 
 import AppButton, { AppButtonVariant } from "@/components/ui/AppButton";
 import NotifyButton from "@/components/ui/NotifyButton";
+import { EmptyGrid } from "@/components/ui/PagedGridPage";
 import type { WithId, AudioDoc } from "@/lib/api/audios";
 
 export default function AudiosList({
@@ -17,6 +18,8 @@ export default function AudiosList({
   onDelete: (id: string) => void;
   onNotify?: (it: WithId<AudioDoc>) => void;
 }) {
+  if (items.length === 0) return <EmptyGrid>No audios yet.</EmptyGrid>;
+
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 items-start">
       {items.map((it) => (

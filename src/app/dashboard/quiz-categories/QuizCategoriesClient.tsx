@@ -6,6 +6,10 @@ import { useAppDispatch, useAppSelector } from "@/lib/redux/store";
 import AppModal from "@/components/ui/AppModal";
 import ConfirmDeleteModal from "@/components/ui/ConfirmDeleteModal";
 import AppButton, { AppButtonVariant } from "@/components/ui/AppButton";
+import Pagination from "@/components/ui/Pagination";
+import PagedGridPage from "@/components/ui/PagedGridPage";
+import DataTable from "@/components/ui/DataTable";
+import { usePagedItems } from "@/lib/hooks/usePagedItems";
 import {
   createQuizCategory,
   editQuizCategory,
@@ -24,48 +28,36 @@ function CategoriesList({
   onDelete: (id: string) => void;
 }) {
   return (
-    <div className="rounded-md border border-primary-200">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="bg-primary-50 text-left text-primary-700">
-            <th className="px-3 py-2">Name</th>
-            <th className="px-3 py-2 text-right">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {items.map((it) => (
-            <tr key={it.id} className="border-t border-primary-200">
-              <td className="px-3 py-2 text-primary-900">{it.name}</td>
-              <td className="px-3 py-2 text-right">
-                <div className="inline-flex gap-2">
-                  <AppButton
-                    variant={AppButtonVariant.Edit}
-                    className="px-3 py-1 text-xs"
-                    onClick={() => onEdit(it)}
-                  >
-                    Edit
-                  </AppButton>
-                  <AppButton
-                    variant={AppButtonVariant.Delete}
-                    className="px-3 py-1 text-xs"
-                    onClick={() => onDelete(it.id)}
-                  >
-                    Delete
-                  </AppButton>
-                </div>
-              </td>
-            </tr>
-          ))}
-          {items.length === 0 && (
-            <tr>
-              <td colSpan={2} className="px-3 py-6 text-center text-primary-600">
-                No categories yet.
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
-    </div>
+    <DataTable
+      rows={items}
+      getKey={(it) => it.id}
+      empty="No categories yet."
+      columns={[
+        { header: "Name", className: "text-primary-900", cell: (it) => it.name },
+        {
+          header: "Actions",
+          className: "text-right",
+          cell: (it) => (
+            <div className="inline-flex gap-2">
+              <AppButton
+                variant={AppButtonVariant.Edit}
+                className="px-3 py-1 text-xs"
+                onClick={() => onEdit(it)}
+              >
+                Edit
+              </AppButton>
+              <AppButton
+                variant={AppButtonVariant.Delete}
+                className="px-3 py-1 text-xs"
+                onClick={() => onDelete(it.id)}
+              >
+                Delete
+              </AppButton>
+            </div>
+          ),
+        },
+      ]}
+    />
   );
 }
 
@@ -145,22 +137,38 @@ export default function QuizCategoriesClient() {
     }
   };
 
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold text-primary-800">
-          Quiz Categories
-        </h2>
-        <AppButton
-          variant={AppButtonVariant.Add}
-          onClick={openAdd}
-          disabled={loading}
-        >
-          Add Category
-        </AppButton>
-      </div>
+  const { pageItems, paginationProps } = usePagedItems(items, {
+    pageSize: 10,
+    pageSizeOptions: [10, 25, 50, 100],
+  });
 
-      <CategoriesList items={items} onEdit={openEdit} onDelete={onDelete} />
+  return (
+    <>
+      <PagedGridPage
+        toolbar={
+          <>
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-semibold text-primary-800">
+              Quiz Categories
+            </h2>
+            <AppButton
+              variant={AppButtonVariant.Add}
+              onClick={openAdd}
+              disabled={loading}
+            >
+              Add Category
+            </AppButton>
+          </div>
+          </>
+        }
+        pager={<Pagination {...paginationProps} />}
+      >
+        <CategoriesList
+          items={pageItems}
+          onEdit={openEdit}
+          onDelete={onDelete}
+        />
+      </PagedGridPage>
 
       <AppModal
         open={isModalOpen}
@@ -206,6 +214,6 @@ export default function QuizCategoriesClient() {
         confirmLabel={isDeleting ? "Deleting..." : "Delete"}
         disabled={isDeleting}
       />
-    </div>
+    </>
   );
 }

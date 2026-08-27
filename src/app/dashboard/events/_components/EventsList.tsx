@@ -9,6 +9,7 @@ import DevicePreviewSelector, {
   type PreviewDevice,
 } from "@/components/ui/DevicePreviewSelector";
 import NotifyButton from "@/components/ui/NotifyButton";
+import { EmptyGrid } from "@/components/ui/PagedGridPage";
 import type { WithId, EventDoc, EventDescriptionItem } from "@/lib/api/events";
 import { EventDescriptionType } from "@/lib/api/events";
 
@@ -115,6 +116,9 @@ export default function EventsList({
   const [device, setDevice] = useState<PreviewDevice>(DEFAULT_PREVIEW_DEVICE);
   return (
     <>
+    {items.length === 0 ? (
+      <EmptyGrid>No events yet.</EmptyGrid>
+    ) : (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 items-start">
       {items.map((it) => (
         <div
@@ -193,10 +197,8 @@ export default function EventsList({
           </div>
         </div>
       ))}
-      {items.length === 0 && (
-        <div className="col-span-full text-center text-primary-600 py-8">No events yet.</div>
-      )}
     </div>
+    )}
 
     <AppModal
       open={!!detail}

@@ -5,6 +5,9 @@ import toast from "react-hot-toast";
 import { useAppDispatch, useAppSelector } from "@/lib/redux/store";
 import AppButton, { AppButtonVariant } from "@/components/ui/AppButton";
 import ConfirmDeleteModal from "@/components/ui/ConfirmDeleteModal";
+import Pagination from "@/components/ui/Pagination";
+import PagedGridPage from "@/components/ui/PagedGridPage";
+import { usePagedItems } from "@/lib/hooks/usePagedItems";
 import {
   createCourseQuiz,
   createDailyQuiz,
@@ -96,9 +99,46 @@ export default function QuizzesClient() {
     };
   }, []);
 
-  // Fetch question counts for any quiz we don't already have a count for.
+  const categoryLookup = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const c of catState.items) map[c.id] = c.name || c.id;
+    return map;
+  }, [catState.items]);
+
+  const filteredItems = useMemo(() => {
+    return items
+      .filter((it) => {
+        if (filter !== "all" && it.kind !== filter) return false;
+        if (statusFilter === "draft" && it.isPublished) return false;
+        if (statusFilter === "published" && !it.isPublished) return false;
+        return true;
+      })
+      // Newest first, id as a stable tiebreak. Firestore returns documents in
+      // id order, which is arbitrary — and an arbitrary order is worse once
+      // the list is paged, because "page 2" stops meaning anything.
+      .sort((a, b) =>
+        a.createdAt === b.createdAt
+          ? b.id.localeCompare(a.id)
+          : b.createdAt.localeCompare(a.createdAt),
+      );
+  }, [items, filter, statusFilter]);
+
+  const { pageItems, resetPage, paginationProps } = usePagedItems(filteredItems);
+
   useEffect(() => {
-    const missing = items.filter((it) => questionCounts[it.id] == null);
+    resetPage();
+  }, [filter, statusFilter, resetPage]);
+
+  /**
+   * Question counts, for the quizzes currently on screen.
+   *
+   * `countQuestions` is one aggregate query *per quiz*, so counting the whole
+   * collection meant a round-trip per quiz on every load — the thing that made
+   * a long list expensive rather than merely long. Counts are kept once
+   * fetched, so paging back is free.
+   */
+  useEffect(() => {
+    const missing = pageItems.filter((it) => questionCounts[it.id] == null);
     if (missing.length === 0) return;
     let cancelled = false;
     (async () => {
@@ -115,22 +155,7 @@ export default function QuizzesClient() {
     return () => {
       cancelled = true;
     };
-  }, [items, questionCounts]);
-
-  const categoryLookup = useMemo(() => {
-    const map: Record<string, string> = {};
-    for (const c of catState.items) map[c.id] = c.name || c.id;
-    return map;
-  }, [catState.items]);
-
-  const filteredItems = useMemo(() => {
-    return items.filter((it) => {
-      if (filter !== "all" && it.kind !== filter) return false;
-      if (statusFilter === "draft" && it.isPublished) return false;
-      if (statusFilter === "published" && !it.isPublished) return false;
-      return true;
-    });
-  }, [items, filter, statusFilter]);
+  }, [pageItems, questionCounts]);
 
   const existingDailyDates = useMemo(() => {
     const set = new Set<string>();
@@ -276,57 +301,62 @@ export default function QuizzesClient() {
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h2 className="text-xl font-semibold text-primary-800">Quizzes</h2>
-        <div className="flex items-center gap-3">
-          <label className="text-sm text-primary-700">
-            <span className="mr-2">Kind:</span>
-            <select
-              value={filter}
-              onChange={(e) => setFilter(e.target.value as KindFilter)}
-              className="rounded-md border border-primary-300 bg-white px-2 py-1 text-sm"
-            >
-              <option value="all">All</option>
-              <option value={QuizKind.Standard}>Standard</option>
-              <option value={QuizKind.Daily}>Daily</option>
-              <option value={QuizKind.Study}>Study</option>
-              <option value={QuizKind.Lesson}>Lesson</option>
-              <option value={QuizKind.Course}>Course</option>
-            </select>
-          </label>
-          <label className="text-sm text-primary-700">
-            <span className="mr-2">Status:</span>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
-              className="rounded-md border border-primary-300 bg-white px-2 py-1 text-sm"
-            >
-              <option value="all">All</option>
-              <option value="draft">Draft</option>
-              <option value="published">Published</option>
-            </select>
-          </label>
-          <AppButton
-            variant={AppButtonVariant.Add}
-            onClick={openAdd}
-            disabled={loading}
-          >
-            Add Quiz
-          </AppButton>
-        </div>
-      </div>
-
-      <QuizzesList
-        items={filteredItems}
-        categoryLookup={categoryLookup}
-        questionCounts={questionCounts}
-        publishingId={publishingId}
-        onEdit={openEdit}
-        onDelete={onDelete}
-        onPublish={handlePublish}
-        onOpenQuestions={(it) => setQuestionsQuiz(it)}
-      />
+    <>
+      <PagedGridPage
+        toolbar={
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <h2 className="text-xl font-semibold text-primary-800">Quizzes</h2>
+            <div className="flex items-center gap-3">
+              <label className="text-sm text-primary-700">
+                <span className="mr-2">Kind:</span>
+                <select
+                  value={filter}
+                  onChange={(e) => setFilter(e.target.value as KindFilter)}
+                  className="rounded-md border border-primary-300 bg-white px-2 py-1 text-sm"
+                >
+                  <option value="all">All</option>
+                  <option value={QuizKind.Standard}>Standard</option>
+                  <option value={QuizKind.Daily}>Daily</option>
+                  <option value={QuizKind.Study}>Study</option>
+                  <option value={QuizKind.Lesson}>Lesson</option>
+                  <option value={QuizKind.Course}>Course</option>
+                </select>
+              </label>
+              <label className="text-sm text-primary-700">
+                <span className="mr-2">Status:</span>
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+                  className="rounded-md border border-primary-300 bg-white px-2 py-1 text-sm"
+                >
+                  <option value="all">All</option>
+                  <option value="draft">Draft</option>
+                  <option value="published">Published</option>
+                </select>
+              </label>
+              <AppButton
+                variant={AppButtonVariant.Add}
+                onClick={openAdd}
+                disabled={loading}
+              >
+                Add Quiz
+              </AppButton>
+            </div>
+          </div>
+        }
+        pager={<Pagination {...paginationProps} />}
+      >
+        <QuizzesList
+          items={pageItems}
+          categoryLookup={categoryLookup}
+          questionCounts={questionCounts}
+          publishingId={publishingId}
+          onEdit={openEdit}
+          onDelete={onDelete}
+          onPublish={handlePublish}
+          onOpenQuestions={(it) => setQuestionsQuiz(it)}
+        />
+      </PagedGridPage>
 
       <QuizFormModal
         open={isModalOpen}
@@ -372,6 +402,6 @@ export default function QuizzesClient() {
         confirmLabel={isDeleting ? "Deleting..." : "Delete"}
         disabled={isDeleting}
       />
-    </div>
+    </>
   );
 }

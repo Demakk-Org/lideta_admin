@@ -1,11 +1,10 @@
 import UsersClient from './UsersClient';
 
+/**
+ * Renders the client alone, like every other list page. Chrome above it would
+ * push the client's viewport-height frame down by that much and drop the
+ * pinned pager below the fold — the page heading lives in the toolbar instead.
+ */
 export default function UsersPage() {
-  return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-semibold text-primary-800">Users</h1>
-      <p className="text-sm text-primary-700">Manage users of the church app.</p>
-      <UsersClient />
-    </div>
-  );
+  return <UsersClient />;
 }

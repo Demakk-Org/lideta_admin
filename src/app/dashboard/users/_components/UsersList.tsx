@@ -1,8 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
 import AppButton, { AppButtonVariant } from "@/components/ui/AppButton";
-import Pagination from "@/components/ui/Pagination";
 import type { WithId, UserDoc } from "@/lib/api/users";
 import { UserRole } from "@/lib/api/users";
 
@@ -15,21 +13,6 @@ export default function UsersList({
   loading: boolean;
   onEdit: (it: WithId<UserDoc>) => void;
 }) {
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
-
-  const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
-
-  // Keep the page in range when the list shrinks or the page size changes.
-  useEffect(() => {
-    if (page > totalPages) setPage(totalPages);
-  }, [page, totalPages]);
-
-  const pageItems = useMemo(
-    () => items.slice((page - 1) * pageSize, page * pageSize),
-    [items, page, pageSize]
-  );
-
   return (
     <div className="rounded-md border border-primary-100 bg-white/60 backdrop-blur">
       <div className="overflow-x-auto">
@@ -44,7 +27,7 @@ export default function UsersList({
             </tr>
           </thead>
           <tbody className="divide-y divide-primary-100">
-            {pageItems.map((it) => (
+            {items.map((it) => (
               <tr key={it.id} className="bg-white/60">
                 <td className="px-4 py-2 text-sm text-primary-900 whitespace-nowrap">
                   <div className="flex items-center gap-3">
@@ -101,18 +84,6 @@ export default function UsersList({
         </table>
       </div>
 
-      {items.length > 0 && (
-        <Pagination
-          page={page}
-          pageSize={pageSize}
-          total={items.length}
-          onPageChange={setPage}
-          onPageSizeChange={(n) => {
-            setPageSize(n);
-            setPage(1);
-          }}
-        />
-      )}
     </div>
   );
 }

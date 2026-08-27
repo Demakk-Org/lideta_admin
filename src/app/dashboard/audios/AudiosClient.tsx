@@ -4,6 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import { useAppDispatch, useAppSelector } from "@/lib/redux/store";
 import AppButton, { AppButtonVariant } from "@/components/ui/AppButton";
+import Pagination from "@/components/ui/Pagination";
+import PagedGridPage from "@/components/ui/PagedGridPage";
+import { usePagedItems } from "@/lib/hooks/usePagedItems";
 import { fetchAudios, createAudio, editAudio, removeAudio } from "@/lib/redux/features/audiosSlice";
 import type { WithId, AudioDoc } from "@/lib/api/audios";
 import AudiosList from "./_components/AudiosList";
@@ -77,29 +80,38 @@ export default function AudiosClient() {
     }
   };
 
-  return (
-    <div className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h2 className="text-xl font-semibold text-primary-800">Audios</h2>
-        <div className="flex items-center gap-3">
-          <AppButton variant={AppButtonVariant.Add} onClick={openAdd} disabled={loading}>Add Audio</AppButton>
-        </div>
-      </div>
+  const { pageItems, paginationProps } = usePagedItems(items);
 
-      <AudiosList
-        items={items}
-        notifying={notifying}
-        onEdit={openEdit}
-        onDelete={onDelete}
-        onNotify={(it) =>
-          notify({
-            type: "audio",
-            id: it.id,
-            title: it.title,
-            imageUrl: it.thumbnailUrl,
-          })
+  return (
+    <>
+      <PagedGridPage
+        toolbar={
+          <>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <h2 className="text-xl font-semibold text-primary-800">Audios</h2>
+            <div className="flex items-center gap-3">
+              <AppButton variant={AppButtonVariant.Add} onClick={openAdd} disabled={loading}>Add Audio</AppButton>
+            </div>
+          </div>
+          </>
         }
-      />
+        pager={<Pagination {...paginationProps} />}
+      >
+        <AudiosList
+          items={pageItems}
+          notifying={notifying}
+          onEdit={openEdit}
+          onDelete={onDelete}
+          onNotify={(it) =>
+            notify({
+              type: "audio",
+              id: it.id,
+              title: it.title,
+              imageUrl: it.thumbnailUrl,
+            })
+          }
+        />
+      </PagedGridPage>
 
       <AudiosFormModal
         open={isModalOpen}
@@ -118,6 +130,6 @@ export default function AudiosClient() {
         onConfirm={confirmDelete}
         confirmLabel="Delete"
       />
-    </div>
+    </>
   );
 }
