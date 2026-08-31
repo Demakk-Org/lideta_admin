@@ -47,3 +47,30 @@ export function missingCoreConfig(): string[] {
   if (!OTP_REQUEST_SECRET) missing.push('OTP_REQUEST_SECRET');
   return missing;
 }
+
+// Google account-linking endpoint (POST /api/google/link). Accepted `aud` values for
+// the Google ID token — the *web* client id covers both web and Android, because
+// `google_sign_in` on Android requests its ID token with the web id as serverClientId.
+export const GOOGLE_LINK_CONFIG = {
+  webClientId: process.env.GOOGLE_WEB_CLIENT_ID || '',
+  iosClientId: process.env.GOOGLE_IOS_CLIENT_ID || '',
+  // Extra audiences for dev only (e.g. the OAuth Playground client id), comma-separated.
+  extraClientIds: (process.env.GOOGLE_EXTRA_CLIENT_IDS || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean),
+  // Per-IP throttle: a real user hits this once per sign-in.
+  ratePerWindow: intEnv('GOOGLE_LINK_IP_CAP', 10),
+  rateWindowSeconds: intEnv('GOOGLE_LINK_IP_WINDOW', 600),
+  // When false, an existing account with an unverified email is linked anyway.
+  // See docs/BACKEND_GOOGLE_LINK_SPEC.md §2 — product decision, not a code-review one.
+  requireEmailVerified: (process.env.GOOGLE_LINK_REQUIRE_EMAIL_VERIFIED ?? 'true') !== 'false',
+} as const;
+
+export function googleLinkAudiences(): string[] {
+  return [
+    GOOGLE_LINK_CONFIG.webClientId,
+    GOOGLE_LINK_CONFIG.iosClientId,
+    ...GOOGLE_LINK_CONFIG.extraClientIds,
+  ].filter(Boolean);
+}

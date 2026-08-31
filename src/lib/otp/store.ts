@@ -267,3 +267,51 @@ export function checkOtp(
 ): Promise<VerifyOutcome> {
   return runVerify(requestId, phoneNumber, code, false);
 }
+
+/**
+ * Generic sliding-window-ish per-IP throttle, keyed in the same `otp_rate_limits`
+ * collection so no new index or collection is needed. Used by /google/link, which
+ * turns an unauthenticated token into a session and so deserves the same care as
+ * /otp/verify. A null `ip` (no `x-forwarded-for`) is always allowed — failing open
+ * here is better than locking out every caller behind a proxy that strips the header.
+ */
+export async function checkAndRecordIpHit(
+  scope: string,
+  ip: string | null,
+  limit: number,
+  windowMs: number,
+): Promise<RateLimitResult> {
+  if (!ip) return { allowed: true };
+  const ref = adminDb.collection(RATE_LIMIT_COLLECTION).doc(`${scope}:ip:${ip}`);
+
+  return adminDb.runTransaction(async (tx) => {
+    const nowMs = Date.now();
+    const snap = await tx.get(ref);
+
+    let count = 1;
+    let windowStartMs = nowMs;
+    if (snap.exists) {
+      const d = snap.data()!;
+      const startedAt = (d.windowStart as Timestamp).toMillis();
+      if (nowMs - startedAt < windowMs) {
+        if ((d.count as number) >= limit) {
+          return {
+            allowed: false,
+            reason: 'ip_cap' as const,
+            resendAfterSeconds: Math.ceil((windowMs - (nowMs - startedAt)) / 1000),
+          };
+        }
+        count = (d.count as number) + 1;
+        windowStartMs = startedAt;
+      }
+    }
+
+    const nowTs = Timestamp.fromMillis(nowMs);
+    tx.set(ref, {
+      count,
+      windowStart: Timestamp.fromMillis(windowStartMs),
+      lastSentAt: nowTs,
+    });
+    return { allowed: true };
+  });
+}

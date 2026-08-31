@@ -20,6 +20,13 @@ export type OtpErrorCode =
   | 'weak_password'
   | 'sms_send_failed'
   | 'unauthorized'
+  // /google/link: the Google ID token failed signature/issuer/expiry/audience
+  // verification, or Google itself has not verified the address on it.
+  | 'invalid_token'
+  // /google/link: refused because the existing Firebase account never verified
+  // its email — linking on a bare email match would hand over someone's data.
+  | 'email_not_verified'
+  | 'account_disabled'
   | 'invalid_request'
   | 'server_error';
 
