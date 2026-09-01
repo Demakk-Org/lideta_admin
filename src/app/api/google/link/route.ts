@@ -29,6 +29,10 @@ export const dynamic = 'force-dynamic';
  */
 export async function POST(req: NextRequest) {
   const log = makeOtpLogger('google/link', crypto.randomUUID());
+  log.info('request_start', {
+    ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? null,
+    userAgent: req.headers.get('user-agent') ?? null,
+  });
 
   // Step 1 — authenticate the caller before doing any work.
   const appSecret = req.headers.get('x-otp-app-secret');
@@ -38,6 +42,7 @@ export async function POST(req: NextRequest) {
     });
     return errorResponse(401, 'unauthorized', 'Missing or invalid app secret');
   }
+  log.info('step1_authenticated');
 
   if (!googleLinkAudiences().length) {
     log.error('config_missing', { missing: ['GOOGLE_WEB_CLIENT_ID', 'GOOGLE_IOS_CLIENT_ID'] });
@@ -45,6 +50,10 @@ export async function POST(req: NextRequest) {
   }
 
   const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null;
+  log.info('config_ok', {
+    audienceCount: googleLinkAudiences().length,
+    requireEmailVerified: GOOGLE_LINK_CONFIG.requireEmailVerified,
+  });
 
   let body: Record<string, unknown>;
   try {
@@ -55,6 +64,10 @@ export async function POST(req: NextRequest) {
   }
 
   const googleIdToken = String(body.googleIdToken ?? '').trim();
+  log.info('body_parsed', {
+    keys: Object.keys(body),
+    tokenLength: googleIdToken.length,
+  });
   if (!googleIdToken) {
     log.warn('token_missing');
     return errorResponse(400, 'invalid_token', 'The Google token could not be verified');
@@ -69,6 +82,11 @@ export async function POST(req: NextRequest) {
       GOOGLE_LINK_CONFIG.ratePerWindow,
       GOOGLE_LINK_CONFIG.rateWindowSeconds * 1000,
     );
+    log.info('rate_check_start', {
+      ip,
+      cap: GOOGLE_LINK_CONFIG.ratePerWindow,
+      windowSeconds: GOOGLE_LINK_CONFIG.rateWindowSeconds,
+    });
     if (!rate.allowed) {
       log.warn('rate_limited', { ip, retryAfterSeconds: rate.resendAfterSeconds });
       return errorResponse(429, 'rate_limited', 'Too many attempts; try again later', {
@@ -76,10 +94,14 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    log.info('rate_check_ok', { ip });
+
     // Step 2 — verify signature, issuer, expiry and audience together.
     let payload;
     try {
-      payload = await verifyGoogleIdToken(googleIdToken);
+      payload = await verifyGoogleIdToken(googleIdToken, (step, data) =>
+        log.info(`step2_${step}`, data),
+      );
     } catch (e) {
       // The `aud` of the rejected token is the one diagnostic worth having here
       // (§6: Android carries the *web* client id). The token itself is never logged.
@@ -96,10 +118,17 @@ export async function POST(req: NextRequest) {
       return errorResponse(400, 'invalid_token', 'The Google token could not be verified');
     }
     const email = payload.email.toLowerCase();
+    log.info('step3_google_email_verified', {
+      sub: payload.sub,
+      emailDomain: email.split('@')[1] ?? null,
+      hasName: Boolean(payload.name),
+      hasPicture: Boolean(payload.picture),
+    });
 
     // Step 4 — find the account to link to. A miss is the ordinary "nothing to
     // link" case: the app will just create a fresh Google account itself.
     let user;
+    log.info('step4_lookup_start', { emailDomain: email.split('@')[1] ?? null });
     try {
       user = await adminAuth.getUserByEmail(email);
     } catch (e) {
@@ -107,6 +136,14 @@ export async function POST(req: NextRequest) {
       log.info('account_not_found', { sub: payload.sub });
       return errorResponse(404, 'account_not_found', 'No account exists for this email');
     }
+
+    log.info('step4_account_found', {
+      uid: user.uid,
+      emailVerified: user.emailVerified,
+      disabled: user.disabled,
+      providers: user.providerData.map((p) => p.providerId),
+      hasPhone: Boolean(user.phoneNumber),
+    });
 
     // Step 5 — policy gates.
     if (user.disabled) {
@@ -125,9 +162,12 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    log.info('step5_policy_ok', { uid: user.uid });
+
     // Step 6 — attach the provider. Re-linking throws, so skip when already there;
     // `sub` is Google's stable subject id and is what Firebase keys the provider on.
     const already = user.providerData.some((p) => p.providerId === 'google.com');
+    log.info('step6_link_start', { uid: user.uid, alreadyLinked: already, sub: payload.sub });
     if (!already) {
       await adminAuth.updateUser(user.uid, {
         providerToLink: {
@@ -140,7 +180,10 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    log.info('step6_link_done', { uid: user.uid, linked: !already });
+
     // Step 7 — mint the session; the app exchanges it via signInWithCustomToken.
+    log.info('step7_mint_start', { uid: user.uid });
     const customToken = await adminAuth.createCustomToken(user.uid);
     log.info('linked', { uid: user.uid, sub: payload.sub, linked: !already });
     return NextResponse.json({ customToken, uid: user.uid, linked: !already });

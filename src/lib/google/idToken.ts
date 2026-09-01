@@ -15,6 +15,9 @@ export interface GoogleIdTokenPayload {
 // No client id/secret needed: verification only fetches Google's public certs.
 const oauth = new OAuth2Client();
 
+/** Trace sink, so this module stays free of any logger import. */
+export type TokenVerifyLog = (step: string, data: Record<string, unknown>) => void;
+
 /**
  * Verify a Google ID token's signature, issuer, expiry AND audience together.
  *
@@ -22,14 +25,36 @@ const oauth = new OAuth2Client();
  * and trusting its `email` claim would let anyone post a hand-written JWT and take
  * over the matching account. Throws on any failure; callers map that to 400.
  */
-export async function verifyGoogleIdToken(idToken: string): Promise<GoogleIdTokenPayload> {
+export async function verifyGoogleIdToken(
+  idToken: string,
+  log?: TokenVerifyLog,
+): Promise<GoogleIdTokenPayload> {
   const audience = googleLinkAudiences();
   if (!audience.length) {
     throw new Error('No Google client ids configured (GOOGLE_WEB_CLIENT_ID / GOOGLE_IOS_CLIENT_ID)');
   }
+  // The claimed `aud` is logged before verification precisely because a mismatch is
+  // the §6 failure: it is the one value that explains "works on web, fails on
+  // Android". It is untrusted at this point and used for nothing but this line.
+  log?.('verify_start', {
+    allowedAudiences: audience,
+    claimedAud: unverifiedAudience(idToken),
+    tokenSegments: idToken.split('.').length,
+  });
+
   const ticket = await oauth.verifyIdToken({ idToken, audience });
   const payload = ticket.getPayload();
   if (!payload) throw new Error('Token carried no payload');
+
+  log?.('verify_ok', {
+    sub: payload.sub,
+    aud: payload.aud ?? null,
+    iss: (payload as { iss?: string }).iss ?? null,
+    emailVerified: payload.email_verified ?? null,
+    expIso: (payload as { exp?: number }).exp
+      ? new Date((payload as { exp: number }).exp * 1000).toISOString()
+      : null,
+  });
   return payload as GoogleIdTokenPayload;
 }
 
