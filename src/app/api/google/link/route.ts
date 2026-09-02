@@ -150,10 +150,20 @@ export async function POST(req: NextRequest) {
       log.warn('account_disabled', { uid: user.uid });
       return errorResponse(409, 'account_disabled', 'This account has been disabled');
     }
-    // Firebase never verifies email at password signup, so an unverified account may
-    // have been registered by someone who never owned the inbox. Linking on the email
-    // alone would hand the Google user that person's data (spec §2).
-    if (GOOGLE_LINK_CONFIG.requireEmailVerified && !user.emailVerified) {
+    // Firebase never verifies email at password signup, so an unverified account's
+    // password credential was never proven to belong to anyone. Google, however, has
+    // just proven the caller owns this inbox -- so the caller IS the rightful owner
+    // and is let in either way. What stays in question is only whether that password
+    // deserves to survive, which the app resolves via `claimCheckRequired` below and
+    // POST /api/google/unlink-password (spec §2).
+    const priorAccountUnverified = !user.emailVerified;
+    const hadPasswordProvider = user.providerData.some(
+      (p) => p.providerId === 'password',
+    );
+
+    // Escape hatch: set GOOGLE_LINK_REQUIRE_EMAIL_VERIFIED=true to restore the old
+    // refusal, which makes the app fall back to asking for the account password.
+    if (GOOGLE_LINK_CONFIG.requireEmailVerified && priorAccountUnverified) {
       log.warn('email_not_verified', { uid: user.uid });
       return errorResponse(
         409,
@@ -168,15 +178,22 @@ export async function POST(req: NextRequest) {
     // `sub` is Google's stable subject id and is what Firebase keys the provider on.
     const already = user.providerData.some((p) => p.providerId === 'google.com');
     log.info('step6_link_start', { uid: user.uid, alreadyLinked: already, sub: payload.sub });
-    if (!already) {
+    if (!already || priorAccountUnverified) {
       await adminAuth.updateUser(user.uid, {
-        providerToLink: {
-          providerId: 'google.com',
-          uid: payload.sub,
-          email,
-          displayName: payload.name,
-          photoURL: payload.picture,
-        },
+        // Google verified this address, so the account's own flag can now be set
+        // truthfully -- which also stops later sign-ins re-entering this branch.
+        ...(priorAccountUnverified ? { emailVerified: true } : {}),
+        ...(already
+          ? {}
+          : {
+              providerToLink: {
+                providerId: 'google.com',
+                uid: payload.sub,
+                email,
+                displayName: payload.name,
+                photoURL: payload.picture,
+              },
+            }),
       });
     }
 
@@ -185,8 +202,21 @@ export async function POST(req: NextRequest) {
     // Step 7 — mint the session; the app exchanges it via signInWithCustomToken.
     log.info('step7_mint_start', { uid: user.uid });
     const customToken = await adminAuth.createCustomToken(user.uid);
-    log.info('linked', { uid: user.uid, sub: payload.sub, linked: !already });
-    return NextResponse.json({ customToken, uid: user.uid, linked: !already });
+    log.info('linked', {
+      uid: user.uid,
+      sub: payload.sub,
+      linked: !already,
+      priorAccountUnverified,
+      hadPasswordProvider,
+    });
+    return NextResponse.json({
+      customToken,
+      uid: user.uid,
+      linked: !already,
+      // Ask only when there is something to revoke: an unverified prior account
+      // that still carries a password credential.
+      claimCheckRequired: priorAccountUnverified && hadPasswordProvider,
+    });
   } catch (e) {
     // Includes the "this Google sub is already on a different uid" case, where
     // updateUser throws — two Firebase accounts for one Google identity, which needs
