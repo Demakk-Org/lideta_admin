@@ -62,9 +62,13 @@ export const GOOGLE_LINK_CONFIG = {
   // Per-IP throttle: a real user hits this once per sign-in.
   ratePerWindow: intEnv('GOOGLE_LINK_IP_CAP', 10),
   rateWindowSeconds: intEnv('GOOGLE_LINK_IP_WINDOW', 600),
-  // When false, an existing account with an unverified email is linked anyway.
-  // See docs/BACKEND_GOOGLE_LINK_SPEC.md §2 — product decision, not a code-review one.
-  requireEmailVerified: (process.env.GOOGLE_LINK_REQUIRE_EMAIL_VERIFIED ?? 'true') !== 'false',
+  // Opt-in strict mode: refuse to link when the existing account never verified
+  // its email. Off by default, because the app now handles that case rather than
+  // needing it refused — it signs the user in (Google proved they own the inbox)
+  // and then asks whether the prior account is theirs, revoking its password via
+  // /api/google/unlink-password if not. Turning this ON makes those users fail
+  // outright, since the app no longer has a password fallback.
+  requireEmailVerified: process.env.GOOGLE_LINK_REQUIRE_EMAIL_VERIFIED === 'true',
 } as const;
 
 export function googleLinkAudiences(): string[] {
