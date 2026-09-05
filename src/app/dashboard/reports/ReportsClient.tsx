@@ -8,6 +8,7 @@ import ConfirmDeleteModal from '@/components/ui/ConfirmDeleteModal';
 import DataTable from '@/components/ui/DataTable';
 import Pagination from '@/components/ui/Pagination';
 import PagedGridPage from '@/components/ui/PagedGridPage';
+import { useAuthReady } from '@/lib/hooks/useAuthReady';
 import { usePagedItems } from '@/lib/hooks/usePagedItems';
 import {
   fetchReports,
@@ -49,15 +50,18 @@ function formatDate(iso: string) {
 export default function ReportsClient() {
   const dispatch = useAppDispatch();
   const { items, status } = useAppSelector((s) => s.reports);
-  const loading = status === 'loading';
+  // Firebase restores the session after mount, and these collections are
+  // admin-only, so querying before `ready` fails the rules check.
+  const { ready, uid } = useAuthReady();
+  const loading = status === 'loading' || !ready;
 
   const [filter, setFilter] = useState<ReportStatus | 'all'>('pending');
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   useEffect(() => {
-    dispatch(fetchReports());
-  }, [dispatch]);
+    if (ready && uid) dispatch(fetchReports());
+  }, [dispatch, ready, uid]);
 
   const filtered = useMemo(
     () => (filter === 'all' ? items : items.filter((r) => r.status === filter)),

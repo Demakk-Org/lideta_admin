@@ -8,6 +8,7 @@ import ConfirmDeleteModal from '@/components/ui/ConfirmDeleteModal';
 import DataTable from '@/components/ui/DataTable';
 import Pagination from '@/components/ui/Pagination';
 import PagedGridPage from '@/components/ui/PagedGridPage';
+import { useAuthReady } from '@/lib/hooks/useAuthReady';
 import { usePagedItems } from '@/lib/hooks/usePagedItems';
 import {
   deleteAccountForRequest,
@@ -54,7 +55,10 @@ function formatDate(iso: string) {
 export default function DeletionRequestsClient() {
   const dispatch = useAppDispatch();
   const { items, status } = useAppSelector((s) => s.deletionRequests);
-  const loading = status === 'loading';
+  // Firebase restores the session after mount, and these collections are
+  // admin-only, so querying before `ready` fails the rules check.
+  const { ready, uid } = useAuthReady();
+  const loading = status === 'loading' || !ready;
 
   const [filter, setFilter] = useState<DeletionRequestStatus | 'all'>(
     'pending',
@@ -63,8 +67,8 @@ export default function DeletionRequestsClient() {
   const [busyId, setBusyId] = useState<string | null>(null);
 
   useEffect(() => {
-    dispatch(fetchDeletionRequests());
-  }, [dispatch]);
+    if (ready && uid) dispatch(fetchDeletionRequests());
+  }, [dispatch, ready, uid]);
 
   const filtered = useMemo(
     () => (filter === 'all' ? items : items.filter((r) => r.status === filter)),
