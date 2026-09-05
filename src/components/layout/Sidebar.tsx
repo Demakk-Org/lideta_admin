@@ -14,6 +14,8 @@ import {
   QuestionMarkCircleIcon,
   AcademicCapIcon,
   Squares2X2Icon,
+  FlagIcon,
+  TrashIcon,
 } from '@heroicons/react/24/outline';
 import toast from 'react-hot-toast';
 import { signOutUser } from '@/lib/api/auth';
@@ -66,6 +68,12 @@ const navigation = [
   { name: 'Audios', href: '/dashboard/audios', icon: SpeakerWaveIcon },
   { name: 'Videos', href: '/dashboard/videos', icon: VideoCameraIcon },
   { name: 'Users', href: '/dashboard/users', icon: UsersIcon },
+  { name: 'Reports', href: '/dashboard/reports', icon: FlagIcon },
+  {
+    name: 'Deletion Requests',
+    href: '/dashboard/deletion-requests',
+    icon: TrashIcon,
+  },
 ];
 
 export default function Sidebar() {

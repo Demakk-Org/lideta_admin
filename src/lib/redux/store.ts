@@ -12,6 +12,8 @@ import eventCategoriesReducer from './features/eventCategoriesSlice';
 import audiosReducer from './features/audiosSlice';
 import videosReducer from './features/videosSlice';
 import groupsReducer from './features/groupsSlice';
+import deletionRequestsReducer from './features/deletionRequestsSlice';
+import reportsReducer from './features/reportsSlice';
 import usersReducer from './features/usersSlice';
 import todayParagraphsReducer from './features/todayParagraphsSlice';
 import quizzesReducer from './features/quizzesSlice';
@@ -54,6 +56,8 @@ export const store = configureStore({
     courses: coursesReducer,
     lessons: lessonsReducer,
     courseCategories: courseCategoriesReducer,
+    deletionRequests: deletionRequestsReducer,
+    reports: reportsReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({
