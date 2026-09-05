@@ -1,0 +1,82 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{db}/documents {
+
+    // NOTE: the wildcard above is named `db`, so every get() below must say
+    // $(db). Writing $(database) leaves the variable unbound, which makes the
+    // path invalid and silently denies the rule.
+    function isAdmin() {
+      return request.auth != null &&
+        get(/databases/$(db)/documents/users/$(request.auth.uid)).data.role == 'ADMIN';
+    }
+
+    // Owner-only: user profile + all subcollections
+    // (meta/streak, daily_verse_reads, etc.)
+    match /users/{uid}/{document=**} {
+      allow read, write: if request.auth != null;
+                         // && request.auth.uid == uid;
+    }
+
+    // App-global content: read for any signed-in user,
+    // writes go through admin console / cloud functions.
+    match /daily_verse/{docId}             { allow read, write: if request.auth != null; }
+    match /news/{docId}                    { allow read, write: if request.auth != null; }
+    match /videos/{docId}                  { allow read, write: if request.auth != null; }
+    match /events/{docId}                  { allow read, write, update: if request.auth != null; }
+    match /event_categories/{docId}        { allow read: if request.auth != null; }
+    match /notifications/{docId}           { allow read: if request.auth != null; }
+    match /bible/{docId}                   { allow read, write, update: if request.auth != null; }
+    match /bible_sources/{docId}           { allow read: if request.auth != null; }
+    match /books/{docId}                   { allow read: if request.auth != null; }
+    match /quizzes/{docId}                 { allow read, write, update: if request.auth != null; }
+    match /courses/{docId}                 { allow read, write, update: if request.auth != null; }
+    match /courses/{courseId}/lessons/{docId}                 { allow read, write, update: if request.auth != null; }
+    match /course_categories/{docId}       { allow read, write, update: if request.auth != null; }
+    match /course_progress/{docId}         { allow read, write, update: if request.auth != null; }
+    match /quiz_categories/{docId}         { allow read: if request.auth != null; }
+    match /quiz_attempts/{docId}           { allow read, write: if request.auth != null; }
+    match /audios/{docId}                  { allow read: if request.auth != null; }
+    match /worship_documents/{docId}       { allow read: if request.auth != null; }
+    match /worship_groups/{docId}          { allow read: if request.auth != null; }
+    match /bible_studies/{docId}           { allow read, write, update: if request.auth != null; }
+    match /bible_study_groups/{docId}      { allow read: if request.auth != null; }
+    match /bible_study_categories/{docId}  { allow read, write, update: if request.auth != null; }
+    match /quiz_categories/{docId}         { allow read, write: if request.auth != null; }
+    match /bible_study_groups/{groupId}/{document=**} {
+      allow read, write: if request.auth != null;
+    }
+    match /quizzes/{quizId}/{document=**} {
+      allow read, write, update: if request.auth != null;
+    }
+
+    // A member reads and writes only their own block list. Private to them —
+    // the blocked member must never be able to see that they were blocked.
+    match /users/{userId}/blocked_users/{blockedUserId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Anyone signed in may file a report; only admins read or triage them.
+    // Pinning reporterUserId and status stops a member filing under someone
+    // else's name or self-marking a report as already reviewed.
+    match /reports/{reportId} {
+      allow create: if request.auth != null
+                    && request.resource.data.reporterUserId == request.auth.uid
+                    && request.resource.data.status == 'pending';
+      allow read, update, delete: if isAdmin();
+    }
+
+    // Written only by the intake API through the admin SDK, which bypasses
+    // rules, so this can stay fully closed to clients.
+    match /deletion_requests/{id} {
+      allow read, write: if isAdmin();
+    }
+
+    // A message may be deleted by its sender OR by the leader of its group.
+    match /bible_study_groups/{groupId}/bible_studies/{studyId}/messages/{messageId} {
+      allow delete: if request.auth != null && (
+        resource.data.senderId == request.auth.uid ||
+        get(/databases/$(db)/documents/bible_study_groups/$(groupId)).data.leader == request.auth.uid
+      );
+    }
+  }
+}
