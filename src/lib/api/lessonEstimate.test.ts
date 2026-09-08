@@ -6,12 +6,12 @@ import {
   parseDuration,
 } from './lessonEstimate';
 import { LessonContentType } from './lessons';
-import type { LessonContentItem } from './lessons';
+import type { FlatContentItem } from './lessons';
 
 const words = (n: number, word = 'word') => Array(n).fill(word).join(' ');
 const amharic = (n: number) => Array(n).fill('ቃል').join(' ');
 
-const paragraph = (text: string): LessonContentItem => ({
+const paragraph = (text: string): FlatContentItem => ({
   type: LessonContentType.Paragraph,
   value: text,
 });

@@ -10,6 +10,17 @@ import {
   updateDoc,
   writeBatch,
 } from 'firebase/firestore';
+import type { ContentLocale } from '@/lib/i18n/contentLocales';
+import {
+  buildLocalized,
+  buildLocalizedList,
+  localesOf,
+  readLocalized,
+  readLocalizedList,
+  resolveLocalized,
+  resolveLocalizedList,
+} from '@/lib/i18n/localizedText';
+import type { LocalizedList, LocalizedText } from '@/lib/i18n/localizedText';
 import { extractYouTubeVideoId, youtubeThumbnailUrl } from '@/lib/api/videos';
 import { bibleVerseFields } from '@/lib/api/quoteVerse';
 import type { BibleVerseFields } from '@/lib/api/quoteVerse';
@@ -33,7 +44,7 @@ export enum LessonContentType {
  * bible rather than typed.
  */
 export type LessonQuoteValue = {
-  text: string;
+  text: LocalizedText;
   /** Display text for a typed quote; JSON-encoded verse reference when
    *  `isBibleVerse` is true. */
   ref: string;
@@ -42,9 +53,10 @@ export type LessonQuoteValue = {
 export type LessonVideoValue = {
   videoType: 'youtube' | 'hosted';
   url: string;
-  title?: string;
+  /** Prose, so localized. The file itself is not. */
+  title?: LocalizedText;
   thumbnailUrl?: string;
-  caption?: string;
+  caption?: LocalizedText;
   /**
    * Playback length, feeding the lesson's time estimate. Read automatically
    * from the file for hosted videos; typed by the admin for youtube, which
@@ -56,24 +68,58 @@ export type LessonVideoValue = {
 export type LessonAudioValue = {
   /** Direct playable file URL, not a page. */
   url: string;
-  title?: string;
+  title?: LocalizedText;
   /** Artwork shown next to the player. */
   thumbnailUrl?: string;
-  caption?: string;
+  caption?: LocalizedText;
   /** Set when the block was picked from the `audios` collection. */
   audioId?: string;
   /** Playback length, feeding the lesson's time estimate. */
   durationSeconds?: number;
 };
 
+/**
+ * A stored content block. The array is shared across languages — only the text
+ * inside a block varies, so a translation can never reorder a lesson, drop a
+ * block, or move a verse reference.
+ */
 export type LessonContentItem =
+  | { type: LessonContentType.Title; value: LocalizedText }
+  | { type: LessonContentType.Paragraph; value: LocalizedText }
+  /** A URL, not prose — one image serves every language. */
+  | { type: LessonContentType.Banner; value: string }
+  | { type: LessonContentType.Quote; value: LessonQuoteValue }
+  | { type: LessonContentType.List; value: LocalizedList }
+  | { type: LessonContentType.Video; value: LessonVideoValue }
+  | { type: LessonContentType.Audio; value: LessonAudioValue };
+
+/**
+ * One language's view of a block — what the estimator, the validator and the
+ * app's renderer all work on. See {@link projectContent}.
+ */
+export type FlatContentItem =
   | { type: LessonContentType.Title; value: string }
   | { type: LessonContentType.Paragraph; value: string }
   | { type: LessonContentType.Banner; value: string }
-  | { type: LessonContentType.Quote; value: LessonQuoteValue }
+  | {
+      type: LessonContentType.Quote;
+      value: Omit<LessonQuoteValue, 'text'> & { text: string };
+    }
   | { type: LessonContentType.List; value: string[] }
-  | { type: LessonContentType.Video; value: LessonVideoValue }
-  | { type: LessonContentType.Audio; value: LessonAudioValue };
+  | {
+      type: LessonContentType.Video;
+      value: Omit<LessonVideoValue, 'title' | 'caption'> & {
+        title?: string;
+        caption?: string;
+      };
+    }
+  | {
+      type: LessonContentType.Audio;
+      value: Omit<LessonAudioValue, 'title' | 'caption'> & {
+        title?: string;
+        caption?: string;
+      };
+    };
 
 export type LessonDoc = {
   /**
@@ -82,13 +128,16 @@ export type LessonDoc = {
    */
   courseId: string;
   order: number;
-  title: string;
-  shortDescription: string;
+  title: LocalizedText;
+  shortDescription: LocalizedText;
+  /** Derived from the key set of `title` on write. */
+  availableLanguages: ContentLocale[];
   /** snake_case, matching the news schema. */
   author_id: string;
   imageUrl: string;
-  category: string;
-  tags: string[];
+  /** The free-form label, not the course category id — so it is prose. */
+  category: LocalizedText;
+  tags: LocalizedList;
   estimatedMinutes: number;
   hasQuiz: boolean;
   status: PublishStatus;
@@ -136,17 +185,6 @@ function coerceStatus(val: unknown): PublishStatus {
     : 'draft';
 }
 
-function toStringArray(input: unknown): string[] {
-  if (Array.isArray(input)) return input.filter((v) => typeof v === 'string');
-  if (typeof input === 'string') {
-    return input
-      .split(/\r?\n/)
-      .map((v) => v.trim())
-      .filter(Boolean);
-  }
-  return [];
-}
-
 /**
  * Omits the field entirely unless a positive duration is known — an absent
  * `durationSeconds` means "unknown", which the estimator reports, whereas a
@@ -169,8 +207,8 @@ function normalizeVideoValue(raw: unknown): LessonVideoValue | null {
     videoType === 'youtube' ? extractYouTubeVideoId(rawUrl) ?? '' : rawUrl;
   if (!url) return null;
 
-  const title = typeof raw.title === 'string' ? raw.title.trim() : '';
-  const caption = typeof raw.caption === 'string' ? raw.caption.trim() : '';
+  const title = buildLocalized(readLocalized(raw.title));
+  const caption = buildLocalized(readLocalized(raw.caption));
   const explicitThumb =
     typeof raw.thumbnailUrl === 'string' ? raw.thumbnailUrl.trim() : '';
   // Hosted videos have no poster fallback in the app; youtube does.
@@ -180,9 +218,9 @@ function normalizeVideoValue(raw: unknown): LessonVideoValue | null {
   return {
     videoType,
     url,
-    ...(title ? { title } : {}),
+    ...(localesOf(title).length ? { title } : {}),
     ...(thumbnailUrl ? { thumbnailUrl } : {}),
-    ...(caption ? { caption } : {}),
+    ...(localesOf(caption).length ? { caption } : {}),
     ...durationField(raw.durationSeconds),
   };
 }
@@ -198,17 +236,17 @@ function normalizeAudioValue(raw: unknown): LessonAudioValue | null {
         : '';
   if (!rawUrl) return null;
 
-  const title = typeof raw.title === 'string' ? raw.title.trim() : '';
-  const caption = typeof raw.caption === 'string' ? raw.caption.trim() : '';
+  const title = buildLocalized(readLocalized(raw.title));
+  const caption = buildLocalized(readLocalized(raw.caption));
   const thumbnailUrl =
     typeof raw.thumbnailUrl === 'string' ? raw.thumbnailUrl.trim() : '';
   const audioId = typeof raw.audioId === 'string' ? raw.audioId.trim() : '';
 
   return {
     url: rawUrl,
-    ...(title ? { title } : {}),
+    ...(localesOf(title).length ? { title } : {}),
     ...(thumbnailUrl ? { thumbnailUrl } : {}),
-    ...(caption ? { caption } : {}),
+    ...(localesOf(caption).length ? { caption } : {}),
     ...(audioId ? { audioId } : {}),
     ...durationField(raw.durationSeconds),
   };
@@ -228,11 +266,17 @@ export function normalizeLessonContent(raw: unknown): LessonContentItem[] {
 
     switch (typeStr) {
       case LessonContentType.List:
-        out.push({ type: LessonContentType.List, value: toStringArray(value) });
+        out.push({
+          type: LessonContentType.List,
+          value: buildLocalizedList(readLocalizedList(value)),
+        });
         break;
       case LessonContentType.Quote: {
-        const text =
-          isRecord(value) && typeof value.text === 'string' ? value.text : '';
+        const text = buildLocalized(
+          readLocalized(isRecord(value) ? value.text : undefined),
+        );
+        // `ref` and the verse coordinates stay flat: a translation that could
+        // move them would send a tapped verse to the wrong chapter.
         const ref =
           isRecord(value) && typeof value.ref === 'string' ? value.ref : '';
         out.push({
@@ -260,21 +304,95 @@ export function normalizeLessonContent(raw: unknown): LessonContentItem[] {
       case LessonContentType.Title:
         out.push({
           type: LessonContentType.Title,
-          value: typeof value === 'string' ? value : '',
+          value: buildLocalized(readLocalized(value)),
         });
         break;
       default:
         out.push({
           type: LessonContentType.Paragraph,
-          value: typeof value === 'string' ? value : String(value ?? ''),
+          value: buildLocalized(readLocalized(value)),
         });
     }
   }
   return out;
 }
 
+/**
+ * One language's view of a body: the shared array with every localized field
+ * resolved through `selected → defaultLanguage → en`.
+ *
+ * Everything that consumes a body — the reading-time estimator, the publish
+ * validator, and the app's renderer — works on this shape, so none of them has
+ * to know that a block's text is a map. Projecting is the *only* place the
+ * fallback chain runs for a body.
+ */
+export function projectContent(
+  content: LessonContentItem[],
+  opts: { selected?: ContentLocale; defaultLanguage?: ContentLocale } = {},
+): FlatContentItem[] {
+  const text = (value: LocalizedText) => resolveLocalized(value, opts).value;
+  const optional = (value?: LocalizedText) => {
+    const resolved = value ? text(value) : '';
+    return resolved ? { value: resolved } : {};
+  };
+
+  return content.map((block): FlatContentItem => {
+    switch (block.type) {
+      case LessonContentType.List:
+        return { type: block.type, value: resolveLocalizedList(block.value, opts) };
+      case LessonContentType.Quote:
+        return {
+          type: block.type,
+          value: { ...block.value, text: text(block.value.text) },
+        };
+      case LessonContentType.Video:
+      case LessonContentType.Audio: {
+        const title = optional(block.value.title);
+        const caption = optional(block.value.caption);
+        return {
+          type: block.type,
+          value: {
+            ...block.value,
+            ...('value' in title ? { title: title.value } : { title: undefined }),
+            ...('value' in caption ? { caption: caption.value } : { caption: undefined }),
+          },
+        } as FlatContentItem;
+      }
+      case LessonContentType.Banner:
+        return { type: block.type, value: block.value };
+      default:
+        return { type: block.type, value: text(block.value) };
+    }
+  });
+}
+
+/** Languages any part of a body has text for — what the editor tabs read. */
+export function contentLanguages(content: LessonContentItem[]): ContentLocale[] {
+  const seen = new Set<ContentLocale>();
+  const add = (value: LocalizedText | LocalizedList | undefined) => {
+    if (value) for (const l of localesOf(value)) seen.add(l);
+  };
+  for (const block of content) {
+    switch (block.type) {
+      case LessonContentType.Banner:
+        break;
+      case LessonContentType.Quote:
+        add(block.value.text);
+        break;
+      case LessonContentType.Video:
+      case LessonContentType.Audio:
+        add(block.value.title);
+        add(block.value.caption);
+        break;
+      default:
+        add(block.value);
+    }
+  }
+  return [...seen];
+}
+
 /** Rejects content the app would throw on or render as nothing. */
-export function validateLessonContent(content: LessonContentItem[]): string[] {
+export function validateLessonContent(content: FlatContentItem[]): string[] {
   const issues: string[] = [];
   content.forEach((block, i) => {
     const at = `Block ${i + 1}`;
@@ -317,17 +435,18 @@ function mapDoc(
   courseId: string,
   data: Record<string, unknown>,
 ): WithId<LessonDoc> {
+  const title = readLocalized(data.title);
   return {
     id,
     courseId,
     order: typeof data.order === 'number' ? data.order : 0,
-    title: typeof data.title === 'string' ? data.title : '',
-    shortDescription:
-      typeof data.shortDescription === 'string' ? data.shortDescription : '',
+    title,
+    shortDescription: readLocalized(data.shortDescription),
+    availableLanguages: localesOf(title),
     author_id: typeof data.author_id === 'string' ? data.author_id : '',
     imageUrl: typeof data.imageUrl === 'string' ? data.imageUrl : '',
-    category: typeof data.category === 'string' ? data.category : '',
-    tags: toStringArray(data.tags),
+    category: readLocalized(data.category),
+    tags: readLocalizedList(data.tags),
     estimatedMinutes:
       typeof data.estimatedMinutes === 'number' ? data.estimatedMinutes : 0,
     hasQuiz: data.hasQuiz === true,
@@ -413,7 +532,8 @@ export async function listLessonOptions(
   const lessons = await listLessonsForCourses(courseIds);
   return lessons.map((l) => ({
     id: l.id,
-    title: l.title,
+    // Dashboard chrome: one string, in whatever language the lesson leads with.
+    title: resolveLocalized(l.title).value,
     courseId: l.courseId,
     order: l.order,
     status: l.status,
@@ -424,39 +544,73 @@ export async function listLessonOptions(
 export type LessonWriteInput = {
   courseId: string;
   order: number;
-  title: string;
-  shortDescription: string;
+  /** Per-language title; a language with no title is not carried. */
+  title: LocalizedText;
+  shortDescription: LocalizedText;
+  category: LocalizedText;
+  tags: LocalizedList;
+  /**
+   * The owning course's primary language. A lesson carries no
+   * `defaultLanguage` of its own — it mirrors the course's, so the two can
+   * never disagree about which language is primary.
+   */
+  defaultLanguage: ContentLocale;
+  /** The shared block array; each block's text is a map. */
+  content: LessonContentItem[];
   author_id: string;
   imageUrl: string;
-  category: string;
-  tags: string[];
   estimatedMinutes: number;
-  content: LessonContentItem[];
 };
 
 function validate(data: LessonWriteInput) {
   if (!data.courseId.trim()) throw new Error('A course is required');
-  if (!data.title.trim()) throw new Error('Lesson title is required');
   if (!Number.isFinite(data.order)) throw new Error('Lesson order is required');
-  if (data.content.length === 0) {
+
+  const title = buildLocalized(data.title);
+  const languages = localesOf(title);
+  if (languages.length === 0) throw new Error('Lesson title is required');
+
+  const content = normalizeLessonContent(data.content);
+  if (content.length === 0) {
     throw new Error('A lesson needs at least one content block');
   }
-  const issues = validateLessonContent(data.content);
-  if (issues.length) throw new Error(issues.join('\n'));
+
+  // Checked once per language the lesson claims: a block that reads fine in
+  // English and is blank in Amharic is a hole for Amharic readers only.
+  for (const locale of languages) {
+    const issues = validateLessonContent(
+      projectContent(content, {
+        selected: locale,
+        defaultLanguage: data.defaultLanguage,
+      }),
+    );
+    if (issues.length) throw new Error(issues.join('\n'));
+  }
 }
 
 /** `courseId` is deliberately absent: the parent path is the course link. */
 function buildWrite(data: LessonWriteInput) {
+  const title = buildLocalized(data.title);
+  const languages = localesOf(title);
+  // No field outruns `title`: text in a language the lesson does not carry
+  // would never be reachable.
+  const keep = (value: LocalizedText) => {
+    const out: LocalizedText = {};
+    for (const l of languages) if (value[l]) out[l] = value[l];
+    return out;
+  };
+
   return {
     order: Math.trunc(data.order),
-    title: data.title.trim(),
-    shortDescription: data.shortDescription.trim(),
+    title,
+    shortDescription: keep(buildLocalized(data.shortDescription)),
+    category: keep(buildLocalized(data.category)),
+    tags: buildLocalizedList(data.tags),
+    availableLanguages: languages,
+    content: normalizeLessonContent(data.content),
     author_id: data.author_id.trim(),
     imageUrl: data.imageUrl.trim(),
-    category: data.category.trim(),
-    tags: data.tags.map((t) => t.trim()).filter(Boolean),
     estimatedMinutes: Math.max(0, Math.trunc(data.estimatedMinutes || 0)),
-    content: normalizeLessonContent(data.content),
   };
 }
 

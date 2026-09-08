@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { validatePrerequisites } from './courses';
+import { buildCourseLocalization, validatePrerequisites } from './courses';
 import type { PrerequisiteCandidate } from './courses';
 
 function course(
@@ -76,5 +76,69 @@ describe('validatePrerequisites', () => {
 
   it('cannot report a cycle when adding, since nothing points at the course yet', () => {
     expect(validatePrerequisites(null, ['physics'], catalog)).toEqual([]);
+  });
+});
+
+describe('buildCourseLocalization', () => {
+  const base = { defaultLanguage: 'en' as const, description: {} };
+
+  it('derives the search key and the language list from the title', () => {
+    const out = buildCourseLocalization({
+      ...base,
+      title: { en: 'Walking with God', am: 'ከእግዚአብሔር ጋር መመላለስ' },
+      description: { en: 'An intro.', am: 'መግቢያ።' },
+    });
+    expect(out.title).toEqual({
+      en: 'Walking with God',
+      am: 'ከእግዚአብሔር ጋር መመላለስ',
+    });
+    expect(out.lowerCaseTitle.en).toBe('walking with god');
+    // Ge'ez is unicameral, so this equals the title — but the field must
+    // exist, the search query is a prefix range on it.
+    expect(out.lowerCaseTitle.am).toBe('ከእግዚአብሔር ጋር መመላለስ');
+    expect(out.availableLanguages).toEqual(['en', 'am']);
+  });
+
+  it('trims, and never writes a language whose title is blank', () => {
+    const out = buildCourseLocalization({
+      ...base,
+      title: { en: '  Walking with God  ', am: '   ' },
+    });
+    expect(out.title).toEqual({ en: 'Walking with God' });
+    expect(out.availableLanguages).toEqual(['en']);
+  });
+
+  it('drops a description in a language with no title', () => {
+    // It would never be reachable: the fallback chain starts at the title.
+    const out = buildCourseLocalization({
+      ...base,
+      title: { en: 'Walking with God' },
+      description: { en: 'An intro.', om: 'Seensa.' },
+    });
+    expect(out.description).toEqual({ en: 'An intro.' });
+  });
+
+  it('honours a non-English primary language', () => {
+    const out = buildCourseLocalization({
+      title: { en: 'Walking with God', am: 'ከእግዚአብሔር ጋር መመላለስ' },
+      description: {},
+      defaultLanguage: 'am',
+    });
+    expect(out.defaultLanguage).toBe('am');
+  });
+
+  it('falls back when the chosen primary has no title', () => {
+    const out = buildCourseLocalization({
+      title: { en: 'Walking with God' },
+      description: {},
+      defaultLanguage: 'om',
+    });
+    expect(out.defaultLanguage).toBe('en');
+  });
+
+  it('refuses a course with no title in any language', () => {
+    expect(() =>
+      buildCourseLocalization({ ...base, title: { en: '  ' } }),
+    ).toThrow('Course title is required');
   });
 });
