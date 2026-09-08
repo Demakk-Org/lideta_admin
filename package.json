@@ -6,7 +6,11 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test": "vitest run",
+    "migrate:course-order": "node --env-file=.env scripts/migrate-course-order-to-createdat.mjs",
+    "migrate:course-translations-v2": "node --env-file=.env scripts/migrate-course-translations-v2.mjs",
+    "apply:course-translation": "node --env-file=.env scripts/apply-course-translation.mjs"
   },
   "dependencies": {
     "@heroicons/react": "^2.2.0",
@@ -31,6 +35,7 @@
     "eslint": "^9",
     "eslint-config-next": "15.4.6",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.10"
   }
 }
