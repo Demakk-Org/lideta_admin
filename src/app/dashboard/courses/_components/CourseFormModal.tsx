@@ -24,11 +24,20 @@ import type {
   CourseCategory,
   WithId as WithCategoryId,
 } from "@/lib/api/courseCategories";
+import LocaleTabs from "@/components/ui/LocaleTabs";
+import {
+  BASE_CONTENT_LOCALE,
+  CONTENT_LOCALE_LABELS,
+} from "@/lib/i18n/contentLocales";
+import type { ContentLocale } from "@/lib/i18n/contentLocales";
+import { displayText, localesOf } from "@/lib/i18n/localizedText";
+import type { LocalizedText } from "@/lib/i18n/localizedText";
 
 export default function CourseFormModal({
   open,
   mode,
   initial,
+  addLanguage,
   categories,
   prerequisiteCandidates,
   submitting,
@@ -38,14 +47,22 @@ export default function CourseFormModal({
   open: boolean;
   mode: "add" | "edit";
   initial?: WithId<CourseDoc>;
+  /** Opens the modal on this language, adding a tab for it. */
+  addLanguage?: ContentLocale;
   categories: WithCategoryId<CourseCategory>[];
   prerequisiteCandidates: PrerequisiteCandidate[];
   submitting: boolean;
   onClose: () => void;
   onSubmit: (payload: CourseWriteInput) => Promise<void> | void;
 }) {
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
+  const [title, setTitle] = useState<LocalizedText>({});
+  const [description, setDescription] = useState<LocalizedText>({});
+  /** Tabs that exist on this document — not every language there is. */
+  const [languages, setLanguages] = useState<ContentLocale[]>([
+    BASE_CONTENT_LOCALE,
+  ]);
+  const [activeLocale, setActiveLocale] =
+    useState<ContentLocale>(BASE_CONTENT_LOCALE);
   const [coverImageUrl, setCoverImageUrl] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [ageGroup, setAgeGroup] = useState<CourseAgeGroup>(CourseAgeGroup.All);
@@ -56,17 +73,62 @@ export default function CourseFormModal({
 
   useEffect(() => {
     if (!open) return;
-    setTitle(initial?.title ?? "");
-    setDescription(initial?.description ?? "");
+    const seededTitle = initial?.title ?? {};
+    const present = localesOf(seededTitle);
+    const primary = initial?.defaultLanguage ?? BASE_CONTENT_LOCALE;
+    // `addLanguage` is the list view's `+`: open straight onto the new tab,
+    // with the fields empty and the primary text alongside as reference.
+    const open2 =
+      addLanguage && !present.includes(addLanguage)
+        ? [...present, addLanguage]
+        : present;
+
+    setTitle(seededTitle);
+    setDescription(initial?.description ?? {});
+    setLanguages(open2.length ? open2 : [primary]);
+    setActiveLocale(addLanguage ?? primary);
     setCoverImageUrl(initial?.coverImageUrl ?? "");
     setCategoryId(initial?.categoryId ?? "");
     setAgeGroup(initial?.ageGroup ?? CourseAgeGroup.All);
     setLevel(initial?.level ?? CourseLevel.Beginner);
     setSequential(initial?.sequential ?? true);
     setPrerequisiteIds(initial?.prerequisiteCourseIds ?? []);
-  }, [open, initial]);
+  }, [open, initial, addLanguage]);
 
   const isEdit = mode === "edit";
+
+  // The primary language is the first tab: what every other language falls
+  // back to, and the only tab that shows the non-translatable fields.
+  const primaryLocale = languages[0] ?? BASE_CONTENT_LOCALE;
+  const isPrimaryTab = activeLocale === primaryLocale;
+
+  const setLocalized = (
+    setter: React.Dispatch<React.SetStateAction<LocalizedText>>,
+    text: string,
+  ) => setter((prev) => ({ ...prev, [activeLocale]: text }));
+
+  const addLocale = (locale: ContentLocale) => {
+    setLanguages((prev) => [...prev, locale]);
+    setActiveLocale(locale);
+  };
+
+  const removeLocale = (locale: ContentLocale) => {
+    if (locale === primaryLocale) return;
+    const drop = (prev: LocalizedText) => {
+      const next = { ...prev };
+      delete next[locale];
+      return next;
+    };
+    setLanguages((prev) => prev.filter((l) => l !== locale));
+    setTitle(drop);
+    setDescription(drop);
+    setActiveLocale(primaryLocale);
+  };
+
+  // A language is carried only once it has a title. An empty tab is dropped on
+  // save rather than written as `{ am: "" }`, which would list the course under
+  // Amharic and then render a blank card.
+  const titled = localesOf(title).filter((l) => (title[l] ?? "").trim());
 
   const candidateById = useMemo(
     () => new Map(prerequisiteCandidates.map((c) => [c.id, c])),
@@ -112,11 +174,20 @@ export default function CourseFormModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      if (!title.trim()) throw new Error("Title is required");
+      if (!titled.length) {
+        throw new Error(
+          `Title is required in ${CONTENT_LOCALE_LABELS[primaryLocale]}`,
+        );
+      }
       if (prerequisiteIssues.length) throw new Error(prerequisiteIssues[0]);
       await onSubmit({
-        title: title.trim(),
-        description: description.trim(),
+        // Blank languages are dropped by the write layer, so the rule lives in
+        // one place rather than in every form.
+        title,
+        description,
+        defaultLanguage: titled.includes(primaryLocale)
+          ? primaryLocale
+          : titled[0],
         coverImageUrl: coverImageUrl.trim(),
         categoryId: categoryId.trim(),
         ageGroup,
@@ -139,7 +210,7 @@ export default function CourseFormModal({
       footer={
         <AppButton
           type="submit"
-          disabled={!title.trim() || submitting || prerequisiteIssues.length > 0}
+          disabled={!titled.length || submitting || prerequisiteIssues.length > 0}
           variant={isEdit ? AppButtonVariant.Edit : AppButtonVariant.Add}
           form="courseForm"
         >
@@ -150,32 +221,73 @@ export default function CourseFormModal({
       <form id="courseForm" onSubmit={handleSubmit} className="space-y-4">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="sm:col-span-2">
-            <label className="block text-sm font-medium text-primary-800">
-              Title
-            </label>
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="mt-1 block w-full rounded-md border border-primary-300 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
-              placeholder="Foundations of Faith"
-              required
-            />
+            {/* Creating is not a translation task: a new course is English and
+                shows no language UI at all. The tabs appear once it exists. */}
+            {isEdit && (
+              <LocaleTabs
+                languages={languages}
+                active={activeLocale}
+                defaultLanguage={primaryLocale}
+                onChange={setActiveLocale}
+                onAdd={addLocale}
+                onRemove={removeLocale}
+              />
+            )}
+            <div
+              className={
+                isEdit
+                  ? "rounded-b-md rounded-tr-md border border-t-0 border-primary-200 p-3"
+                  : ""
+              }
+            >
+              <label className="block text-sm font-medium text-primary-800">
+                Title{isEdit && ` (${CONTENT_LOCALE_LABELS[activeLocale]})`}
+              </label>
+              {!isPrimaryTab && (
+                <p className="mt-1 whitespace-pre-wrap rounded border border-primary-200 bg-primary-50 px-2 py-1 text-xs text-primary-700">
+                  {title[primaryLocale] || (
+                    <span className="italic text-primary-500">(empty)</span>
+                  )}
+                </p>
+              )}
+              <input
+                type="text"
+                value={title[activeLocale] ?? ""}
+                onChange={(e) => setLocalized(setTitle, e.target.value)}
+                className="mt-1 block w-full rounded-md border border-primary-300 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                placeholder="Foundations of Faith"
+                required={isPrimaryTab}
+              />
+
+              <label className="mt-3 block text-sm font-medium text-primary-800">
+                Description{isEdit && ` (${CONTENT_LOCALE_LABELS[activeLocale]})`}
+              </label>
+              {!isPrimaryTab && (
+                <p className="mt-1 whitespace-pre-wrap rounded border border-primary-200 bg-primary-50 px-2 py-1 text-xs text-primary-700">
+                  {description[primaryLocale] || (
+                    <span className="italic text-primary-500">(empty)</span>
+                  )}
+                </p>
+              )}
+              <textarea
+                value={description[activeLocale] ?? ""}
+                onChange={(e) => setLocalized(setDescription, e.target.value)}
+                className="mt-1 block w-full rounded-md border border-primary-300 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                rows={3}
+                placeholder="An eight-lesson introduction."
+              />
+
+              {!isPrimaryTab && (
+                <p className="mt-2 text-xs text-primary-600">
+                  Leave the title empty and this language is not written at all —
+                  the course simply is not offered in it.
+                </p>
+              )}
+            </div>
           </div>
 
-          <div className="sm:col-span-2">
-            <label className="block text-sm font-medium text-primary-800">
-              Description
-            </label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              className="mt-1 block w-full rounded-md border border-primary-300 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
-              rows={3}
-              placeholder="An eight-lesson introduction."
-            />
-          </div>
-
+          {isPrimaryTab && (
+            <>
           <div>
             <label className="block text-sm font-medium text-primary-800">
               Category
@@ -188,7 +300,7 @@ export default function CourseFormModal({
               <option value="">No category</option>
               {categories.map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.name || c.id}
+                  {displayText(c.name) || c.id}
                 </option>
               ))}
               {isEdit &&
@@ -348,7 +460,10 @@ export default function CourseFormModal({
                 onSelect={async (f) => {
                   try {
                     setUploading(true);
-                    const url = await uploadCourseImage(f, title || "course");
+                    const url = await uploadCourseImage(
+                      f,
+                      title[primaryLocale] || "course",
+                    );
                     setCoverImageUrl(url);
                     toast.success("Cover uploaded");
                   } catch {
@@ -376,7 +491,10 @@ export default function CourseFormModal({
             </div>
           </div>
 
-          {isEdit && (
+            </>
+          )}
+
+          {isEdit && isPrimaryTab && (
             <div className="sm:col-span-2 rounded-md border border-primary-200 bg-primary-50 p-3 text-xs text-primary-700">
               Lessons: {initial?.lessonCount ?? 0} published · Final quiz:{" "}
               {initial?.hasFinalQuiz ? "yes" : "no"} · Status: {initial?.status}

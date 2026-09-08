@@ -22,6 +22,12 @@ import type {
   PrerequisiteCandidate,
   WithId,
 } from "@/lib/api/courses";
+import { useContentNotification } from "@/lib/notifications/useContentNotification";
+import Pagination from "@/components/ui/Pagination";
+import PagedGridPage from "@/components/ui/PagedGridPage";
+import { usePagedItems } from "@/lib/hooks/usePagedItems";
+import { displayText } from "@/lib/i18n/localizedText";
+import type { ContentLocale } from "@/lib/i18n/contentLocales";
 import CoursesList from "./_components/CoursesList";
 import CourseFormModal from "./_components/CourseFormModal";
 import LessonsModal from "./_components/LessonsModal";
@@ -39,7 +45,10 @@ export default function CoursesClient() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalType, setModalType] = useState<"add" | "edit">("add");
   const [editingId, setEditingId] = useState<string | null>(null);
+  /** Set by the `+` on a course card: open the editor on that language. */
+  const [addLanguage, setAddLanguage] = useState<ContentLocale | undefined>();
   const [submitting, setSubmitting] = useState(false);
+  const { notifying, notify } = useContentNotification();
 
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [publishingId, setPublishingId] = useState<string | null>(null);
@@ -62,7 +71,7 @@ export default function CoursesClient() {
 
   const categoryLookup = useMemo(() => {
     const map: Record<string, string> = {};
-    for (const c of categoriesState.items) map[c.id] = c.name || c.id;
+    for (const c of categoriesState.items) map[c.id] = displayText(c.name) || c.id;
     return map;
   }, [categoriesState.items]);
 
@@ -90,13 +99,21 @@ export default function CoursesClient() {
     [items, statusFilter],
   );
 
+  const { pageItems, resetPage, paginationProps } = usePagedItems(filteredItems);
+
+  useEffect(() => {
+    resetPage();
+  }, [statusFilter, resetPage]);
+
   // The picker and its cycle check need every course, not the filtered view.
   const prerequisiteCandidates = useMemo<PrerequisiteCandidate[]>(
     () =>
       items
         .map((it) => ({
           id: it.id,
-          title: it.title,
+          // The picker is dashboard chrome: one string, in the course's own
+          // primary language.
+          title: displayText(it.title, it.defaultLanguage),
           status: it.status,
           prerequisiteCourseIds: it.prerequisiteCourseIds,
         }))
@@ -185,71 +202,96 @@ export default function CoursesClient() {
     : 0;
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h2 className="text-xl font-semibold text-primary-800">Courses</h2>
-        <div className="flex items-center gap-3">
-          <label className="text-sm text-primary-700">
-            <span className="mr-2">Status:</span>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
-              className="rounded-md border border-primary-300 bg-white px-2 py-1 text-sm"
-            >
-              <option value="all">All</option>
-              <option value="draft">Draft</option>
-              <option value="published">Published</option>
-            </select>
-          </label>
-          <AppButton
-            variant={AppButtonVariant.Add}
-            onClick={() => {
-              setModalType("add");
-              setEditingId(null);
-              setIsModalOpen(true);
-            }}
-            disabled={loading}
-          >
-            Add Course
-          </AppButton>
-        </div>
-      </div>
+    <>
+      <PagedGridPage
+        toolbar={
+          <>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <h2 className="text-xl font-semibold text-primary-800">Courses</h2>
+              <div className="flex items-center gap-3">
+                <label className="text-sm text-primary-700">
+                  <span className="mr-2">Status:</span>
+                  <select
+                    value={statusFilter}
+                    onChange={(e) =>
+                      setStatusFilter(e.target.value as StatusFilter)
+                    }
+                    className="rounded-md border border-primary-300 bg-white px-2 py-1 text-sm"
+                  >
+                    <option value="all">All</option>
+                    <option value="draft">Draft</option>
+                    <option value="published">Published</option>
+                  </select>
+                </label>
+                <AppButton
+                  variant={AppButtonVariant.Add}
+                  onClick={() => {
+                    setModalType("add");
+                    setEditingId(null);
+                    setAddLanguage(undefined);
+                    setIsModalOpen(true);
+                  }}
+                  disabled={loading}
+                >
+                  Add Course
+                </AppButton>
+              </div>
+            </div>
 
-      {lessonsState.status === "failed" && (
-        <p className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
-          Lessons could not be loaded, so every course shows 0 lessons.{" "}
-          {lessonsState.error}
-        </p>
-      )}
-
-      <CoursesList
-        items={filteredItems}
-        categoryLookup={categoryLookup}
-        lessonCounts={lessonCounts}
-        publishingId={publishingId}
-        onEdit={(it) => {
-          setModalType("edit");
-          setEditingId(it.id);
-          setIsModalOpen(true);
-        }}
-        onDelete={(id) => {
-          setDeleteId(id);
-          setIsDeleteOpen(true);
-        }}
-        onPublish={handlePublish}
-        onUnpublish={handleUnpublish}
-        onOpenLessons={(it) => setLessonsCourse(it)}
-      />
+            {lessonsState.status === "failed" && (
+              <p className="mt-3 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+                Lessons could not be loaded, so every course shows 0 lessons.{" "}
+                {lessonsState.error}
+              </p>
+            )}
+          </>
+        }
+        pager={<Pagination {...paginationProps} />}
+      >
+        <CoursesList
+          items={pageItems}
+          categoryLookup={categoryLookup}
+          lessonCounts={lessonCounts}
+          publishingId={publishingId}
+          notifying={notifying}
+          onEdit={(it, locale) => {
+            setModalType("edit");
+            setEditingId(it.id);
+            setAddLanguage(locale);
+            setIsModalOpen(true);
+          }}
+          onDelete={(id) => {
+            setDeleteId(id);
+            setIsDeleteOpen(true);
+          }}
+          onPublish={handlePublish}
+          onUnpublish={handleUnpublish}
+          onOpenLessons={(it) => setLessonsCourse(it)}
+          onNotify={(it) =>
+            notify({
+              type: "course",
+              id: it.id,
+              title: displayText(it.title, it.defaultLanguage),
+              body: displayText(it.description, it.defaultLanguage),
+              imageUrl: it.coverImageUrl,
+            })
+          }
+        />
+      </PagedGridPage>
 
       <CourseFormModal
         open={isModalOpen}
         mode={modalType}
         initial={editingItem}
+        addLanguage={addLanguage}
         categories={categoriesState.items}
         prerequisiteCandidates={prerequisiteCandidates}
         submitting={submitting}
         onClose={() => {
-          if (!submitting) setIsModalOpen(false);
+          if (!submitting) {
+            setIsModalOpen(false);
+            setAddLanguage(undefined);
+          }
         }}
         onSubmit={handleSubmit}
       />
@@ -257,7 +299,10 @@ export default function CoursesClient() {
       <LessonsModal
         open={!!lessonsCourse}
         courseId={lessonsCourseLive?.id ?? lessonsCourse?.id ?? null}
-        courseTitle={lessonsCourseLive?.title ?? lessonsCourse?.title}
+        courseTitle={displayText(
+          (lessonsCourseLive ?? lessonsCourse)?.title ?? {},
+          (lessonsCourseLive ?? lessonsCourse)?.defaultLanguage,
+        )}
         onClose={() => setLessonsCourse(null)}
       />
 
@@ -280,6 +325,6 @@ export default function CoursesClient() {
         }
         disabled={isDeleting}
       />
-    </div>
+    </>
   );
 }

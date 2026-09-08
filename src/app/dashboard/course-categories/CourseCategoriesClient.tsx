@@ -15,6 +15,18 @@ import {
   removeCourseCategory,
 } from "@/lib/redux/features/courseCategoriesSlice";
 import { fetchCourses } from "@/lib/redux/features/coursesSlice";
+import LocaleTabs, { LocaleChips } from "@/components/ui/LocaleTabs";
+import Pagination from "@/components/ui/Pagination";
+import PagedGridPage from "@/components/ui/PagedGridPage";
+import DataTable from "@/components/ui/DataTable";
+import { usePagedItems } from "@/lib/hooks/usePagedItems";
+import {
+  BASE_CONTENT_LOCALE,
+  CONTENT_LOCALE_LABELS,
+} from "@/lib/i18n/contentLocales";
+import type { ContentLocale } from "@/lib/i18n/contentLocales";
+import { displayText, localesOf } from "@/lib/i18n/localizedText";
+import type { LocalizedText } from "@/lib/i18n/localizedText";
 import type { CourseCategory, WithId } from "@/lib/api/courseCategories";
 
 export default function CourseCategoriesClient() {
@@ -26,8 +38,13 @@ export default function CourseCategoriesClient() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalType, setModalType] = useState<"add" | "edit">("add");
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
+  const [name, setName] = useState<LocalizedText>({});
+  const [description, setDescription] = useState<LocalizedText>({});
+  const [languages, setLanguages] = useState<ContentLocale[]>([
+    BASE_CONTENT_LOCALE,
+  ]);
+  const [activeLocale, setActiveLocale] =
+    useState<ContentLocale>(BASE_CONTENT_LOCALE);
   const [imageUrl, setImageUrl] = useState("");
   const [uploading, setUploading] = useState(false);
 
@@ -44,17 +61,27 @@ export default function CourseCategoriesClient() {
   const openAdd = () => {
     setModalType("add");
     setEditingId(null);
-    setName("");
-    setDescription("");
+    setName({});
+    setDescription({});
+    setLanguages([BASE_CONTENT_LOCALE]);
+    setActiveLocale(BASE_CONTENT_LOCALE);
     setImageUrl("");
     setIsModalOpen(true);
   };
 
-  const openEdit = (it: WithId<CourseCategory>) => {
+  const openEdit = (it: WithId<CourseCategory>, addLanguage?: ContentLocale) => {
     setModalType("edit");
     setEditingId(it.id);
-    setName(it.name ?? "");
-    setDescription(it.description ?? "");
+    const present = localesOf(it.name);
+    const opened =
+      addLanguage && !present.includes(addLanguage)
+        ? [...present, addLanguage]
+        : present;
+    setName(it.name);
+    setDescription(it.description);
+    setLanguages(opened.length ? opened : [BASE_CONTENT_LOCALE]);
+    // The list view's `+` opens straight onto the new language.
+    setActiveLocale(addLanguage ?? BASE_CONTENT_LOCALE);
     setImageUrl(it.imageUrl ?? "");
     setIsModalOpen(true);
   };
@@ -62,12 +89,10 @@ export default function CourseCategoriesClient() {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      if (!name.trim()) throw new Error("Category name is required");
-      const data: CourseCategory = {
-        name: name.trim(),
-        description: description.trim(),
-        imageUrl: imageUrl.trim(),
-      };
+      if (!(name[BASE_CONTENT_LOCALE] ?? "").trim()) {
+        throw new Error("Category name is required in English");
+      }
+      const data: CourseCategory = { name, description, imageUrl: imageUrl.trim() };
       if (editingId) {
         await dispatch(editCourseCategory({ id: editingId, data })).unwrap();
         toast.success("Category updated");
@@ -98,97 +123,128 @@ export default function CourseCategoriesClient() {
     }
   };
 
+  const isPrimaryTab = activeLocale === BASE_CONTENT_LOCALE;
+
+  const setLocalized = (
+    setter: React.Dispatch<React.SetStateAction<LocalizedText>>,
+    value: string,
+  ) => setter((prev) => ({ ...prev, [activeLocale]: value }));
+
+  const addLocale = (locale: ContentLocale) => {
+    setLanguages((prev) => [...prev, locale]);
+    setActiveLocale(locale);
+  };
+
+  const removeLocale = (locale: ContentLocale) => {
+    if (locale === BASE_CONTENT_LOCALE) return;
+    const drop = (prev: LocalizedText) => {
+      const next = { ...prev };
+      delete next[locale];
+      return next;
+    };
+    setLanguages((prev) => prev.filter((l) => l !== locale));
+    setName(drop);
+    setDescription(drop);
+    setActiveLocale(BASE_CONTENT_LOCALE);
+  };
+
+  const { pageItems, paginationProps } = usePagedItems(items, {
+    pageSize: 10,
+    pageSizeOptions: [10, 25, 50, 100],
+  });
+
   // Every category becomes a chip in the app, used or not.
   const usageCount = (categoryId: string) =>
     courses.items.filter((c) => c.categoryId === categoryId).length;
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold text-primary-800">
-          Course Categories
-        </h2>
-        <AppButton
-          variant={AppButtonVariant.Add}
-          onClick={openAdd}
-          disabled={loading}
-        >
-          Add Category
-        </AppButton>
-      </div>
-
-      <div className="rounded-md border border-primary-200">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="bg-primary-50 text-left text-primary-700">
-              <th className="px-3 py-2">Name</th>
-              <th className="px-3 py-2">Description</th>
-              <th className="px-3 py-2">Courses</th>
-              <th className="px-3 py-2 text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((it) => {
-              const used = usageCount(it.id);
-              return (
-                <tr key={it.id} className="border-t border-primary-200">
-                  <td className="px-3 py-2 text-primary-900">
-                    <div className="flex items-center gap-2">
-                      {it.imageUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={it.imageUrl}
-                          alt=""
-                          className="h-8 w-8 rounded border object-cover"
-                        />
-                      ) : null}
-                      {it.name}
-                    </div>
-                  </td>
-                  <td className="px-3 py-2 text-primary-700">
-                    {it.description || "—"}
-                  </td>
-                  <td className="px-3 py-2 text-primary-700">
-                    {used === 0 ? (
-                      <span className="text-amber-700">unused</span>
-                    ) : (
-                      used
-                    )}
-                  </td>
-                  <td className="px-3 py-2 text-right">
-                    <div className="inline-flex gap-2">
-                      <AppButton
-                        variant={AppButtonVariant.Edit}
-                        className="px-3 py-1 text-xs"
-                        onClick={() => openEdit(it)}
-                      >
-                        Edit
-                      </AppButton>
-                      <AppButton
-                        variant={AppButtonVariant.Delete}
-                        className="px-3 py-1 text-xs"
-                        onClick={() => {
-                          setDeleteId(it.id);
-                          setIsDeleteOpen(true);
-                        }}
-                      >
-                        Delete
-                      </AppButton>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-            {items.length === 0 && (
-              <tr>
-                <td colSpan={4} className="px-3 py-6 text-center text-primary-600">
-                  No course categories yet.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+    <>
+      <PagedGridPage
+        toolbar={
+          <>
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-semibold text-primary-800">
+              Course Categories
+            </h2>
+            <AppButton
+              variant={AppButtonVariant.Add}
+              onClick={openAdd}
+              disabled={loading}
+            >
+              Add Category
+            </AppButton>
+          </div>
+          </>
+        }
+        pager={<Pagination {...paginationProps} />}
+      >
+        <DataTable
+          rows={pageItems}
+          getKey={(it) => it.id}
+          empty="No course categories yet."
+          columns={[
+            {
+              header: "Name",
+              cell: (it) => (
+                <div className="flex items-center gap-2">
+                  {it.imageUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={it.imageUrl}
+                      alt=""
+                      className="h-8 w-8 rounded border object-cover"
+                    />
+                  ) : null}
+                  {displayText(it.name) || it.id}
+                  <LocaleChips
+                    languages={localesOf(it.name)}
+                    defaultLanguage={BASE_CONTENT_LOCALE}
+                    onAdd={(locale) => openEdit(it, locale)}
+                  />
+                </div>
+              ),
+            },
+            {
+              header: "Description",
+              cell: (it) => displayText(it.description) || "—",
+            },
+            {
+              header: "Courses",
+              cell: (it) =>
+                usageCount(it.id) === 0 ? (
+                  <span className="text-amber-700">unused</span>
+                ) : (
+                  usageCount(it.id)
+                ),
+            },
+            {
+              header: "Actions",
+              className: "text-right",
+              cell: (it) => (
+                <div className="inline-flex gap-2">
+                  <AppButton
+                    variant={AppButtonVariant.Edit}
+                    className="px-3 py-1 text-xs"
+                    onClick={() => openEdit(it)}
+                  >
+                    Edit
+                  </AppButton>
+                  <AppButton
+                    variant={AppButtonVariant.Delete}
+                    className="px-3 py-1 text-xs"
+                    onClick={() => {
+                      setDeleteId(it.id);
+                      setIsDeleteOpen(true);
+                    }}
+                  >
+                    Delete
+                  </AppButton>
+                </div>
+              ),
+            },
+          ]}
+        />
+      </PagedGridPage>
 
       <AppModal
         open={isModalOpen}
@@ -198,7 +254,7 @@ export default function CourseCategoriesClient() {
         footer={
           <AppButton
             type="submit"
-            disabled={!name.trim()}
+            disabled={!(name[BASE_CONTENT_LOCALE] ?? "").trim()}
             variant={
               modalType === "add" ? AppButtonVariant.Add : AppButtonVariant.Edit
             }
@@ -210,29 +266,44 @@ export default function CourseCategoriesClient() {
       >
         <form id="courseCategoryForm" onSubmit={submit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-primary-800">
-              Name
-            </label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="mt-1 block w-full rounded-md border border-primary-300 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
-              placeholder="Foundations"
-              required
+            <LocaleTabs
+              languages={languages}
+              active={activeLocale}
+              defaultLanguage={BASE_CONTENT_LOCALE}
+              onChange={setActiveLocale}
+              onAdd={addLocale}
+              onRemove={removeLocale}
             />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-primary-800">
-              Description
-            </label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              className="mt-1 block w-full rounded-md border border-primary-300 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
-              placeholder="Core teaching for new members"
-              rows={2}
-            />
+            <div className="rounded-b-md rounded-tr-md border border-t-0 border-primary-200 p-3">
+              <label className="block text-sm font-medium text-primary-800">
+                Name ({CONTENT_LOCALE_LABELS[activeLocale]})
+              </label>
+              <input
+                type="text"
+                value={name[activeLocale] ?? ""}
+                onChange={(e) => setLocalized(setName, e.target.value)}
+                className="mt-1 block w-full rounded-md border border-primary-300 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                placeholder="Foundations"
+                required={activeLocale === BASE_CONTENT_LOCALE}
+              />
+
+              <label className="mt-3 block text-sm font-medium text-primary-800">
+                Description ({CONTENT_LOCALE_LABELS[activeLocale]})
+              </label>
+              <textarea
+                value={description[activeLocale] ?? ""}
+                onChange={(e) => setLocalized(setDescription, e.target.value)}
+                className="mt-1 block w-full rounded-md border border-primary-300 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                placeholder="Core teaching for new members"
+                rows={2}
+              />
+
+              <p className="mt-2 text-xs text-primary-600">
+                {isPrimaryTab
+                  ? "English is the name the dashboard sorts and joins on — it is required and is never replaced by a translation."
+                  : "A label for the app. Leave it empty and members reading this language see the English name."}
+              </p>
+            </div>
           </div>
           <div>
             <label className="block text-sm font-medium text-primary-800">
@@ -246,7 +317,10 @@ export default function CourseCategoriesClient() {
                 onSelect={async (f) => {
                   try {
                     setUploading(true);
-                    const url = await uploadCourseImage(f, name || "category");
+                    const url = await uploadCourseImage(
+                      f,
+                      name[BASE_CONTENT_LOCALE] || "category",
+                    );
                     setImageUrl(url);
                     toast.success("Image uploaded");
                   } catch {
@@ -288,6 +362,6 @@ export default function CourseCategoriesClient() {
         confirmLabel={isDeleting ? "Deleting..." : "Delete"}
         disabled={isDeleting}
       />
-    </div>
+    </>
   );
 }
