@@ -33,6 +33,10 @@ export default function EventsClient() {
   // Filter: all / upcoming / past
   const [filter, setFilter] = useState<"all" | "upcoming" | "past">("all");
 
+  // Time range filter (inclusive, yyyy-mm-dd from the date inputs)
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isBatchDeleteOpen, setIsBatchDeleteOpen] = useState(false);
   const [batchDeleting, setBatchDeleting] = useState(false);
@@ -56,17 +60,51 @@ export default function EventsClient() {
 
   const categories = useMemo(() => catState.items.map((c) => c.name), [catState.items]);
 
+  const rangeStart = useMemo(() => {
+    if (!fromDate) return null;
+    const t = new Date(`${fromDate}T00:00:00`).getTime();
+    return isNaN(t) ? null : t;
+  }, [fromDate]);
+
+  const rangeEnd = useMemo(() => {
+    if (!toDate) return null;
+    const t = new Date(`${toDate}T23:59:59.999`).getTime();
+    return isNaN(t) ? null : t;
+  }, [toDate]);
+
   const visibleItems = useMemo(() => {
     const now = Date.now();
-    if (filter === "all") return items;
+    const parse = (v?: string) => {
+      if (!v) return null;
+      const t = new Date(v).getTime();
+      return isNaN(t) ? null : t;
+    };
     return items.filter((it) => {
-      const tStr = it.end_date_time || it.start_date_time;
-      if (!tStr) return filter === "past" ? false : true;
-      const t = new Date(tStr as string).getTime();
-      if (isNaN(t)) return true;
-      return filter === "past" ? t < now : t >= now;
+      const start = parse(it.start_date_time);
+      const end = parse(it.end_date_time);
+
+      if (filter !== "all") {
+        const tStr = it.end_date_time || it.start_date_time;
+        if (!tStr) {
+          if (filter === "past") return false;
+        } else {
+          const t = new Date(tStr as string).getTime();
+          if (!isNaN(t) && (filter === "past" ? t >= now : t < now)) return false;
+        }
+      }
+
+      if (rangeStart !== null || rangeEnd !== null) {
+        // Keep events whose span overlaps the selected range; undated events are excluded.
+        const eventStart = start ?? end;
+        const eventEnd = end ?? start;
+        if (eventStart === null || eventEnd === null) return false;
+        if (rangeStart !== null && eventEnd < rangeStart) return false;
+        if (rangeEnd !== null && eventStart > rangeEnd) return false;
+      }
+
+      return true;
     });
-  }, [items, filter]);
+  }, [items, filter, rangeStart, rangeEnd]);
 
   // Drop selections that are no longer visible (filter change or deletion)
   useEffect(() => {
@@ -148,7 +186,7 @@ export default function EventsClient() {
 
   useEffect(() => {
     resetPage();
-  }, [filter, resetPage]);
+  }, [filter, fromDate, toDate, resetPage]);
 
   return (
     <>
@@ -193,6 +231,40 @@ export default function EventsClient() {
                   <option value="past">Past</option>
                 </select>
               </label>
+              <div className="flex flex-wrap items-center gap-2 text-sm text-primary-700">
+                <label className="flex items-center gap-1">
+                  <span>From:</span>
+                  <input
+                    type="date"
+                    value={fromDate}
+                    max={toDate || undefined}
+                    onChange={(e) => setFromDate(e.target.value)}
+                    className="rounded-md border border-primary-300 bg-white px-2 py-1 text-sm"
+                  />
+                </label>
+                <label className="flex items-center gap-1">
+                  <span>To:</span>
+                  <input
+                    type="date"
+                    value={toDate}
+                    min={fromDate || undefined}
+                    onChange={(e) => setToDate(e.target.value)}
+                    className="rounded-md border border-primary-300 bg-white px-2 py-1 text-sm"
+                  />
+                </label>
+                {(fromDate || toDate) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFromDate("");
+                      setToDate("");
+                    }}
+                    className="rounded-md border border-primary-300 bg-white px-2 py-1 text-xs text-primary-700 hover:bg-primary-50"
+                  >
+                    Clear dates
+                  </button>
+                )}
+              </div>
               <AppButton variant={AppButtonVariant.Add} onClick={openAdd} disabled={loading}>Add Event</AppButton>
             </div>
           </div>
