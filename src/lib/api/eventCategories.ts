@@ -3,6 +3,12 @@ import { addDoc, collection, deleteDoc, doc, getDocs, query, updateDoc } from 'f
 
 export type EventCategory = {
   name: string;
+  /**
+   * Fallback image for every event in this category that has no image of its
+   * own. The four standing weekly programmes carry none, so without this the
+   * app repeats one drawn placeholder down the whole list.
+   */
+  imageUrl?: string;
 };
 
 export type WithId<T> = T & { id: string };
