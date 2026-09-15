@@ -347,12 +347,8 @@ export async function updateEvent(
       }
     }
     const toWrite = sanitizeEventForWrite(data);
-    //TODO: this part is change for development purpose only
-    // the update to act as
-    // revert when done
-    // await updateDoc(doc(colRef, id), { ...toWrite });
-    const docRef = await addDoc(colRef, { ...toWrite });
-    console.log('[eventsApi] updated id', docRef.id);
+    await updateDoc(doc(colRef, id), { ...toWrite });
+    console.log('[eventsApi] updated id', id);
   } catch (err) {
     console.error('[eventsApi] updateEvent error', err);
     throw new Error('Failed to update event');

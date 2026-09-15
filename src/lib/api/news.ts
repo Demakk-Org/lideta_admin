@@ -247,11 +247,7 @@ export async function updateNews(
     if (Object.prototype.hasOwnProperty.call(toWrite, 'createdAt')) {
       delete (toWrite as Record<string, unknown>).createdAt;
     }
-    //TODO: this part is change for development purpose only
-    // the update to act as
-    // revert when done
-    // await updateDoc(doc(colRef, id), { ...toWrite });
-    await addDoc(colRef, { ...toWrite, createdAt: Timestamp.now() });
+    await updateDoc(doc(colRef, id), { ...toWrite });
   } catch (err) {
     console.error('[newsApi] updateNews error', err);
     throw new Error('Failed to update news');

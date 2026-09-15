@@ -1,5 +1,5 @@
 import { LessonContentType } from './lessons';
-import type { LessonContentItem } from './lessons';
+import type { FlatContentItem } from './lessons';
 
 /**
  * Tunable inputs to the lesson-time estimate. These are deliberately in one
@@ -99,7 +99,7 @@ export type LessonEstimate = {
  * separate document, and keeping this a pure function of `content` is what
  * lets the form recompute it on every keystroke.
  */
-export function estimateLesson(content: LessonContentItem[]): LessonEstimate {
+export function estimateLesson(content: FlatContentItem[]): LessonEstimate {
   let textSeconds = 0;
   let mediaSeconds = 0;
   let visualSeconds = 0;

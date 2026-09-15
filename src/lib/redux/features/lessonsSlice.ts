@@ -9,6 +9,7 @@ import {
   updateLesson,
 } from '@/lib/api/lessons';
 import { estimateLesson } from '@/lib/api/lessonEstimate';
+import { projectContent } from '@/lib/api/lessons';
 import { listCourseOptions } from '@/lib/api/courses';
 import type { LessonDoc, LessonWriteInput, WithId } from '@/lib/api/lessons';
 import type { PublishStatus } from '@/lib/api/courses';
@@ -89,7 +90,9 @@ export const reestimateLesson = createAsyncThunk(
     );
     if (!lesson) throw new Error('Lesson not found');
 
-    const { minutes } = estimateLesson(lesson.content);
+    // Estimated from one language's view — the primary one, since that is the
+    // structure every translation follows.
+    const { minutes } = estimateLesson(projectContent(lesson.content));
     const before = lesson.estimatedMinutes;
     if (minutes !== before) {
       await setLessonEstimatedMinutes(id, courseId, minutes);

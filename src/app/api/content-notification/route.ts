@@ -11,24 +11,48 @@ const MAX_TOKENS_PER_BATCH = 500;
  * out of the notification payload to decide where a tap lands, so it must match
  * the client's deep-link registry — same contract the video route already uses.
  */
-const CONTENT_TYPES = {
+type ContentTypeConfig = {
+  title: (title: string) => string;
+  body: (title: string, detail?: string) => string;
+  scope: 'personal' | 'global';
+  /**
+   * Data-only pushes let the app render its own banner instead of the OS one.
+   * Types that predate that contract keep the `notification` block.
+   */
+  dataOnly?: boolean;
+};
+
+const CONTENT_TYPES: Record<string, ContentTypeConfig> = {
   audio: {
-    title: 'New Audio Available',
+    title: () => 'New Audio Available',
     body: (t: string) => `Listen to "${t}" now!`,
+    scope: 'personal',
   },
   news: {
-    title: 'New Article Published',
+    title: () => 'New Article Published',
     body: (t: string) => `Read "${t}" now!`,
+    scope: 'personal',
   },
   event: {
-    title: 'New Event Announced',
+    title: () => 'New Event Announced',
     body: (t: string) => `Check out "${t}"!`,
+    scope: 'personal',
+  },
+  course: {
+    // Courses carry their own headline and blurb: the title names the course
+    // and the body is the course description the admin already wrote.
+    title: (t: string) => `New course: ${t}`,
+    body: (t: string, detail?: string) =>
+      detail?.trim() ? detail.trim() : `Start "${t}" now!`,
+    scope: 'global',
+    dataOnly: true,
   },
   daily_verse: {
-    title: 'Verse of the Day',
+    title: () => 'Verse of the Day',
     body: (t: string) => `Today's verse: ${t}`,
+    scope: 'personal',
   },
-} as const;
+};
 
 type ContentType = keyof typeof CONTENT_TYPES;
 
@@ -36,6 +60,8 @@ type ContentNotificationPayload = {
   type: ContentType;
   id: string;
   title: string;
+  /** Optional detail line; only `course` uses it today (its description). */
+  body?: string;
   imageUrl?: string;
 };
 
@@ -89,40 +115,56 @@ export async function POST(req: NextRequest) {
 
     const { type, id, title, imageUrl } = body;
     const copy = CONTENT_TYPES[type];
-    const notificationTitle = copy.title;
-    const notificationBody = copy.body(title);
+    const notificationTitle = copy.title(title);
+    const notificationBody = copy.body(title, body.body);
 
-    const userIds = await fetchAllUsers();
-    console.info('[contentNotification] Fetched users', {
-      requestId,
+    // Canonical `key:value|key:value` shape the app parses.
+    const deepLink = `type:${type}|id:${id}`;
+    const record = {
       type,
-      userCount: userIds.length,
-    });
+      title: notificationTitle,
+      body: notificationBody,
+      deepLink,
+      scope: copy.scope,
+      isRead: false,
+      imageUrl: imageUrl || null,
+      createdAt: FieldValue.serverTimestamp(),
+    };
 
-    const notificationPromises = userIds.map((userId) =>
-      adminDb
-        .collection('users')
-        .doc(userId)
-        .collection('notifications')
-        .add({
-          title: notificationTitle,
-          body: notificationBody,
-          createdAt: FieldValue.serverTimestamp(),
-          isRead: false,
-          imageUrl: imageUrl || null,
-          // Canonical `key:value|key:value` shape the app parses.
-          deepLink: `type:${type}|id:${id}`,
-          type,
-          scope: 'personal',
-        }),
-    );
+    // A global notification is one document every member reads; a personal one
+    // is fanned out into each user's own subcollection.
+    let inAppNotifications: number;
+    if (copy.scope === 'global') {
+      await adminDb.collection('notifications').add(record);
+      inAppNotifications = 1;
+      console.info('[contentNotification] Created global notification', {
+        requestId,
+        type,
+      });
+    } else {
+      const userIds = await fetchAllUsers();
+      console.info('[contentNotification] Fetched users', {
+        requestId,
+        type,
+        userCount: userIds.length,
+      });
 
-    await Promise.all(notificationPromises);
-    console.info('[contentNotification] Created in-app notifications', {
-      requestId,
-      type,
-      count: notificationPromises.length,
-    });
+      await Promise.all(
+        userIds.map((userId) =>
+          adminDb
+            .collection('users')
+            .doc(userId)
+            .collection('notifications')
+            .add(record),
+        ),
+      );
+      inAppNotifications = userIds.length;
+      console.info('[contentNotification] Created in-app notifications', {
+        requestId,
+        type,
+        count: inAppNotifications,
+      });
+    }
 
     const tokens = await fetchPushTokens();
     console.info('[contentNotification] Retrieved push tokens', {
@@ -132,19 +174,25 @@ export async function POST(req: NextRequest) {
 
     if (tokens.length > 0) {
       const message = {
-        notification: {
-          title: notificationTitle,
-          body: notificationBody,
-        },
         // `type` + `id` say where a tap goes, `title` + `body` are what the user
-        // reads. No duplicate keys — the client has one shape to resolve.
+        // reads. Every value is a string — FCM rejects anything else in `data`.
         data: {
-          type,
-          id,
+          type: String(type),
+          id: String(id),
           title: notificationTitle,
           body: notificationBody,
         },
-      } as const;
+        // Data-only: the app draws its own banner. Older types still ship the
+        // `notification` block so the OS renders one for them.
+        ...(copy.dataOnly
+          ? {}
+          : {
+              notification: {
+                title: notificationTitle,
+                body: notificationBody,
+              },
+            }),
+      };
 
       for (let i = 0; i < tokens.length; i += MAX_TOKENS_PER_BATCH) {
         const batch = tokens.slice(i, i + MAX_TOKENS_PER_BATCH);
@@ -166,7 +214,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       ok: true,
-      inAppNotifications: userIds.length,
+      scope: copy.scope,
+      inAppNotifications,
       pushNotifications: tokens.length,
     });
   } catch (error) {

@@ -18,6 +18,10 @@ import {
 import { ArrowPathIcon } from "@heroicons/react/24/outline";
 import { LessonContentType } from "@/lib/api/lessons";
 import type { LessonDoc, LessonWriteInput, WithId } from "@/lib/api/lessons";
+import { LocaleChips } from "@/components/ui/LocaleTabs";
+import { BASE_CONTENT_LOCALE } from "@/lib/i18n/contentLocales";
+import type { ContentLocale } from "@/lib/i18n/contentLocales";
+import { displayText, localesOf } from "@/lib/i18n/localizedText";
 import LessonFormModal from "./LessonFormModal";
 
 function blockSummary(lesson: WithId<LessonDoc>): string {
@@ -43,10 +47,19 @@ export default function LessonsModal({
   const dispatch = useAppDispatch();
   const allLessons = useAppSelector((s) => s.lessons.items);
   const users = useAppSelector((s) => s.users.items);
+  // Lessons mirror the course's primary language rather than choosing their
+  // own, so the legacy fields on both always hold the same language.
+  const primaryLocale = useAppSelector(
+    (s) =>
+      s.courses.items.find((c) => c.id === courseId)?.defaultLanguage ??
+      BASE_CONTENT_LOCALE,
+  );
 
   const [formOpen, setFormOpen] = useState(false);
   const [formMode, setFormMode] = useState<"add" | "edit">("add");
   const [editing, setEditing] = useState<WithId<LessonDoc> | null>(null);
+  /** Set by the `+` on a lesson row: open the editor on that language. */
+  const [addLanguage, setAddLanguage] = useState<ContentLocale | undefined>();
   const [submitting, setSubmitting] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -97,6 +110,7 @@ export default function LessonsModal({
       }
       setFormOpen(false);
       setEditing(null);
+      setAddLanguage(undefined);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Save failed";
       toast.error(msg);
@@ -186,6 +200,7 @@ export default function LessonsModal({
             onClick={() => {
               setFormMode("add");
               setEditing(null);
+              setAddLanguage(undefined);
               setFormOpen(true);
             }}
           >
@@ -248,13 +263,24 @@ export default function LessonsModal({
                       </button>
                     </p>
                     <p className="mt-1 text-sm font-medium text-primary-900 break-words">
-                      {l.title || l.id}
+                      {displayText(l.title, primaryLocale) || l.id}
                     </p>
-                    {l.shortDescription && (
+                    {displayText(l.shortDescription, primaryLocale) && (
                       <p className="mt-1 text-xs text-primary-700">
-                        {l.shortDescription}
+                        {displayText(l.shortDescription, primaryLocale)}
                       </p>
                     )}
+                    <LocaleChips
+                      className="mt-1"
+                      languages={localesOf(l.title)}
+                      defaultLanguage={primaryLocale}
+                      onAdd={(locale) => {
+                        setFormMode("edit");
+                        setEditing(l);
+                        setAddLanguage(locale);
+                        setFormOpen(true);
+                      }}
+                    />
                     <p className="mt-1 text-[11px] text-primary-600">
                       {blockSummary(l)}
                     </p>
@@ -281,6 +307,7 @@ export default function LessonsModal({
                       onClick={() => {
                         setFormMode("edit");
                         setEditing(l);
+                        setAddLanguage(undefined);
                         setFormOpen(true);
                       }}
                     >
@@ -305,7 +332,9 @@ export default function LessonsModal({
         open={formOpen}
         mode={formMode}
         courseId={courseId ?? ""}
+        primaryLocale={primaryLocale}
         initial={editing ?? undefined}
+        addLanguage={addLanguage}
         defaultOrder={nextOrder}
         users={users}
         submitting={submitting}
@@ -313,6 +342,7 @@ export default function LessonsModal({
           if (!submitting) {
             setFormOpen(false);
             setEditing(null);
+            setAddLanguage(undefined);
           }
         }}
         onSubmit={handleSubmit}

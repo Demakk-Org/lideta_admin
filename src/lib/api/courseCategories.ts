@@ -8,11 +8,25 @@ import {
   query,
   updateDoc,
 } from 'firebase/firestore';
+import type { ContentLocale } from '@/lib/i18n/contentLocales';
+import {
+  buildLocalized,
+  displayText,
+  localesOf,
+  readLocalized,
+} from '@/lib/i18n/localizedText';
+import type { LocalizedText } from '@/lib/i18n/localizedText';
 
 export type CourseCategory = {
-  name: string;
-  description?: string;
+  /**
+   * Per-language label. Unlike a course a category has no `defaultLanguage` —
+   * it falls back to `en`, then to whatever language it does have.
+   */
+  name: LocalizedText;
+  description: LocalizedText;
   imageUrl?: string;
+  /** Derived from the key set of `name` on write. */
+  availableLanguages?: ContentLocale[];
 };
 
 export type WithId<T> = T & { id: string };
@@ -26,29 +40,45 @@ export async function listCourseCategories(): Promise<WithId<CourseCategory>[]> 
     return snap.docs
       .map((d) => {
         const data = d.data() as Record<string, unknown>;
+        const name = readLocalized(data.name);
         return {
           id: d.id,
-          name: typeof data.name === 'string' ? data.name : '',
-          description:
-            typeof data.description === 'string' ? data.description : '',
+          name,
+          description: readLocalized(data.description),
           imageUrl: typeof data.imageUrl === 'string' ? data.imageUrl : '',
+          availableLanguages: localesOf(name),
         };
       })
-      .sort((a, b) => a.name.localeCompare(b.name));
+      // The dashboard's own ordering, so it sorts on one language.
+      .sort((a, b) => displayText(a.name).localeCompare(displayText(b.name)));
   } catch (err) {
     console.error('[courseCategoriesApi] listCourseCategories error', err);
     throw new Error('Failed to list course categories');
   }
 }
 
+function buildWrite(data: CourseCategory) {
+  const name = buildLocalized(data.name);
+  const availableLanguages = localesOf(name);
+  if (availableLanguages.length === 0) {
+    throw new Error('Category name is required');
+  }
+
+  const description = buildLocalized(data.description);
+  const keep: LocalizedText = {};
+  for (const l of availableLanguages) if (description[l]) keep[l] = description[l];
+
+  return {
+    name,
+    description: keep,
+    imageUrl: data.imageUrl?.trim() ?? '',
+    availableLanguages,
+  };
+}
+
 export async function addCourseCategory(data: CourseCategory): Promise<string> {
   try {
-    if (!data.name?.trim()) throw new Error('Category name is required');
-    const ref = await addDoc(colRef, {
-      name: data.name.trim(),
-      description: data.description?.trim() ?? '',
-      imageUrl: data.imageUrl?.trim() ?? '',
-    });
+    const ref = await addDoc(colRef, buildWrite(data));
     return ref.id;
   } catch (err) {
     console.error('[courseCategoriesApi] addCourseCategory error', err);
@@ -62,12 +92,7 @@ export async function updateCourseCategory(
   data: CourseCategory,
 ): Promise<void> {
   try {
-    if (!data.name?.trim()) throw new Error('Category name cannot be empty');
-    await updateDoc(doc(colRef, id), {
-      name: data.name.trim(),
-      description: data.description?.trim() ?? '',
-      imageUrl: data.imageUrl?.trim() ?? '',
-    });
+    await updateDoc(doc(colRef, id), buildWrite(data));
   } catch (err) {
     console.error('[courseCategoriesApi] updateCourseCategory error', err);
     if (err instanceof Error) throw err;

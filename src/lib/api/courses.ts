@@ -12,6 +12,16 @@ import {
 } from 'firebase/firestore';
 
 import { deleteQuiz, lessonQuizId } from '@/lib/api/quizzes';
+import { BASE_CONTENT_LOCALE, CONTENT_LOCALE_LABELS } from '@/lib/i18n/contentLocales';
+import type { ContentLocale } from '@/lib/i18n/contentLocales';
+import {
+  buildLocalized,
+  displayText,
+  localesOf,
+  lowerCaseOf,
+  readLocalized,
+} from '@/lib/i18n/localizedText';
+import type { LocalizedText } from '@/lib/i18n/localizedText';
 
 export enum CourseAgeGroup {
   Children = 'children',
@@ -46,9 +56,20 @@ export const COURSE_LEVEL_LABELS: Record<CourseLevel, string> = {
 };
 
 export type CourseDoc = {
-  title: string;
-  lowerCaseTitle: string;
-  description: string;
+  /** Every language the course is written in — `{ en: "…", am: "…" }`. */
+  title: LocalizedText;
+  /** Derived from {@link title} on write; the per-language search key. */
+  lowerCaseTitle: LocalizedText;
+  description: LocalizedText;
+  /**
+   * Derived from the key set of {@link title} on write. The catalog filters on
+   * it with `array-contains` and never opens the maps, so it is never
+   * authored — a language listed here with no title is a course that is listed
+   * and then renders blank.
+   */
+  availableLanguages: ContentLocale[];
+  /** The language a member falls back to. Always a key of {@link title}. */
+  defaultLanguage: ContentLocale;
   coverImageUrl: string;
   categoryId: string;
   ageGroup: CourseAgeGroup;
@@ -134,16 +155,32 @@ function coercePrerequisites(val: unknown): string[] {
   return val.filter((v): v is string => typeof v === 'string' && v.trim() !== '');
 }
 
+function coerceDefaultLanguage(
+  val: unknown,
+  title: LocalizedText,
+): ContentLocale {
+  const present = localesOf(title);
+  if (typeof val === 'string' && present.includes(val as ContentLocale)) {
+    return val as ContentLocale;
+  }
+  // Must be a language the course actually has, or the fallback chain starts
+  // on a language with no text.
+  return present.includes(BASE_CONTENT_LOCALE)
+    ? BASE_CONTENT_LOCALE
+    : (present[0] ?? BASE_CONTENT_LOCALE);
+}
+
 function mapDoc(id: string, data: Record<string, unknown>): WithId<CourseDoc> {
-  const title = typeof data.title === 'string' ? data.title : '';
+  const title = readLocalized(data.title);
   return {
     id,
     title,
-    lowerCaseTitle:
-      typeof data.lowerCaseTitle === 'string'
-        ? data.lowerCaseTitle
-        : title.toLowerCase(),
-    description: typeof data.description === 'string' ? data.description : '',
+    lowerCaseTitle: readLocalized(data.lowerCaseTitle),
+    description: readLocalized(data.description),
+    // Derived on write, so it is read back as stored — the publish gate is
+    // what catches a document a seeder wrote by hand.
+    availableLanguages: localesOf(title),
+    defaultLanguage: coerceDefaultLanguage(data.defaultLanguage, title),
     coverImageUrl:
       typeof data.coverImageUrl === 'string' ? data.coverImageUrl : '',
     categoryId: typeof data.categoryId === 'string' ? data.categoryId : '',
@@ -193,7 +230,12 @@ export async function listCourseOptions(): Promise<CourseOption[]> {
         const data = d.data() as Record<string, unknown>;
         return {
           id: d.id,
-          title: typeof data.title === 'string' ? data.title : '',
+          // Pickers and validation messages are dashboard chrome, which stays
+          // English-first: one string, in the course's own primary language.
+          title: displayText(
+            readLocalized(data.title),
+            data.defaultLanguage as ContentLocale | undefined,
+          ),
           status: typeof data.status === 'string' ? data.status : '',
           hasFinalQuiz: data.hasFinalQuiz === true,
         };
@@ -223,7 +265,10 @@ export async function listPrerequisiteCandidates(): Promise<
         const data = d.data() as Record<string, unknown>;
         return {
           id: d.id,
-          title: typeof data.title === 'string' ? data.title : '',
+          title: displayText(
+            readLocalized(data.title),
+            data.defaultLanguage as ContentLocale | undefined,
+          ),
           status: coerceStatus(data.status),
           prerequisiteCourseIds: coercePrerequisites(data.prerequisiteCourseIds),
         };
@@ -295,8 +340,15 @@ export function validatePrerequisites(
 }
 
 export type CourseWriteInput = {
-  title: string;
-  description: string;
+  /**
+   * Authored text, one entry per language. A language whose title is blank is
+   * dropped rather than written as an empty placeholder — the app would list
+   * the course and then render a blank card.
+   */
+  title: LocalizedText;
+  description: LocalizedText;
+  /** Preferred fallback language; ignored when it has no title. */
+  defaultLanguage: ContentLocale;
   coverImageUrl: string;
   categoryId: string;
   ageGroup: CourseAgeGroup;
@@ -305,8 +357,55 @@ export type CourseWriteInput = {
   prerequisiteCourseIds: string[];
 };
 
+/**
+ * `lowerCaseTitle` and `availableLanguages` are *derived from* `title` here and
+ * nowhere else, which is what makes it impossible for them to disagree with it.
+ */
+export function buildCourseLocalization(
+  input: Pick<CourseWriteInput, 'title' | 'description' | 'defaultLanguage'>,
+): {
+  title: LocalizedText;
+  lowerCaseTitle: LocalizedText;
+  description: LocalizedText;
+  availableLanguages: ContentLocale[];
+  defaultLanguage: ContentLocale;
+} {
+  const title = buildLocalized(input.title);
+  const availableLanguages = localesOf(title);
+  if (availableLanguages.length === 0) {
+    throw new Error('Course title is required');
+  }
+
+  return {
+    title,
+    lowerCaseTitle: lowerCaseOf(title),
+    // A description in a language with no title would never be reachable.
+    description: pickLanguages(buildLocalized(input.description), availableLanguages),
+    availableLanguages,
+    defaultLanguage: availableLanguages.includes(input.defaultLanguage)
+      ? input.defaultLanguage
+      : (availableLanguages.includes(BASE_CONTENT_LOCALE)
+          ? BASE_CONTENT_LOCALE
+          : availableLanguages[0]),
+  };
+}
+
+/** Drops languages the document does not carry, so no field outruns `title`. */
+function pickLanguages(
+  value: LocalizedText,
+  languages: ContentLocale[],
+): LocalizedText {
+  const out: LocalizedText = {};
+  for (const locale of languages) {
+    if (value[locale]) out[locale] = value[locale];
+  }
+  return out;
+}
+
 function validate(data: CourseWriteInput) {
-  if (!data.title.trim()) throw new Error('Course title is required');
+  if (localesOf(buildLocalized(data.title)).length === 0) {
+    throw new Error('Course title is required');
+  }
 }
 
 async function assertPrerequisites(id: string | null, data: CourseWriteInput) {
@@ -320,12 +419,8 @@ async function assertPrerequisites(id: string | null, data: CourseWriteInput) {
 }
 
 function buildWrite(data: CourseWriteInput) {
-  const title = data.title.trim();
   return {
-    title,
-    // Catalog search is a prefix range on this field.
-    lowerCaseTitle: title.toLowerCase(),
-    description: data.description.trim(),
+    ...buildCourseLocalization(data),
     coverImageUrl: data.coverImageUrl.trim(),
     categoryId: data.categoryId.trim(),
     ageGroup: data.ageGroup,
@@ -436,9 +531,11 @@ export async function validateCoursePublish(
     issues.push('No lesson is published yet — publish the lessons first');
   }
 
+  issues.push(...validateCourseLanguages(course));
+
   const seenOrders = new Set<number>();
   for (const l of published) {
-    const title = typeof l.data.title === 'string' && l.data.title ? l.data.title : l.id;
+    const title = displayText(readLocalized(l.data.title), course.defaultLanguage) || l.id;
     const order = typeof l.data.order === 'number' ? l.data.order : NaN;
     if (!Number.isFinite(order)) {
       issues.push(`Lesson "${title}" has no order`);
@@ -449,6 +546,7 @@ export async function validateCoursePublish(
     }
     const content = Array.isArray(l.data.content) ? l.data.content : [];
     if (content.length === 0) issues.push(`Lesson "${title}" has no content`);
+    issues.push(...validateLessonLanguages(course, title, l.data));
     if (l.data.hasQuiz === true) {
       issues.push(
         ...(await validateQuizTree(
@@ -464,6 +562,62 @@ export async function validateCoursePublish(
   }
 
   return issues;
+}
+
+/**
+ * `availableLanguages` is derived from `title` on every write here, so this
+ * only ever fires on a document a seeder or a hand edit produced. It stays
+ * because the catalog filter trusts that array and never opens `title`: a
+ * language listed there with no title is a course that is listed and then
+ * renders blank.
+ */
+function validateCourseLanguages(course: CourseDoc): CoursePublishIssue[] {
+  const issues: CoursePublishIssue[] = [];
+  const titled = localesOf(course.title);
+
+  if (titled.length === 0) {
+    issues.push('The course has no title in any language');
+    return issues;
+  }
+  for (const l of course.availableLanguages) {
+    if (!titled.includes(l)) {
+      issues.push(
+        `availableLanguages lists ${CONTENT_LOCALE_LABELS[l]} but there is no title for it`,
+      );
+    }
+  }
+  for (const l of titled) {
+    if (!course.availableLanguages.includes(l)) {
+      issues.push(
+        `${CONTENT_LOCALE_LABELS[l]} has a title but is missing from availableLanguages — the catalog filter will hide it`,
+      );
+    }
+  }
+  if (!titled.includes(course.defaultLanguage)) {
+    issues.push(
+      `defaultLanguage is ${CONTENT_LOCALE_LABELS[course.defaultLanguage]}, which the course has no title for`,
+    );
+  }
+  return issues;
+}
+
+/**
+ * Every language the *course* offers must reach the end of it. A lesson with
+ * no Amharic title is a member browsing in Amharic who hits English halfway
+ * through — legal for the renderer, but an authoring mistake.
+ */
+function validateLessonLanguages(
+  course: CourseDoc,
+  lessonTitle: string,
+  raw: Record<string, unknown>,
+): CoursePublishIssue[] {
+  const titled = localesOf(readLocalized(raw.title));
+  return course.availableLanguages
+    .filter((l) => !titled.includes(l))
+    .map(
+      (l) =>
+        `Lesson "${lessonTitle}" has no ${CONTENT_LOCALE_LABELS[l]} title, but the course offers ${CONTENT_LOCALE_LABELS[l]}`,
+    );
 }
 
 async function validateQuizTree(

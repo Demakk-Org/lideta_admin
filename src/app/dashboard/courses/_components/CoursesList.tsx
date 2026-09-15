@@ -1,33 +1,45 @@
 "use client";
 
 import AppButton, { AppButtonVariant } from "@/components/ui/AppButton";
+import NotifyButton from "@/components/ui/NotifyButton";
+import { EmptyGrid } from "@/components/ui/PagedGridPage";
 import {
   COURSE_AGE_GROUP_LABELS,
   COURSE_LEVEL_LABELS,
 } from "@/lib/api/courses";
 import type { CourseDoc, WithId } from "@/lib/api/courses";
+import { LocaleChips } from "@/components/ui/LocaleTabs";
+import type { ContentLocale } from "@/lib/i18n/contentLocales";
+import { displayText, localesOf } from "@/lib/i18n/localizedText";
 
 export default function CoursesList({
   items,
   categoryLookup,
   lessonCounts,
   publishingId,
+  notifying,
   onEdit,
   onDelete,
   onPublish,
   onUnpublish,
   onOpenLessons,
+  onNotify,
 }: {
   items: WithId<CourseDoc>[];
   categoryLookup: Record<string, string>;
   lessonCounts: Record<string, { total: number; published: number }>;
   publishingId: string | null;
-  onEdit: (it: WithId<CourseDoc>) => void;
+  notifying?: boolean;
+  /** `addLanguage` opens the editor straight onto a new language tab. */
+  onEdit: (it: WithId<CourseDoc>, addLanguage?: ContentLocale) => void;
   onDelete: (id: string) => void;
   onPublish: (it: WithId<CourseDoc>) => void;
   onUnpublish: (it: WithId<CourseDoc>) => void;
   onOpenLessons: (it: WithId<CourseDoc>) => void;
+  onNotify?: (it: WithId<CourseDoc>) => void;
 }) {
+  if (items.length === 0) return <EmptyGrid>No courses yet.</EmptyGrid>;
+
   return (
     <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {items.map((it) => {
@@ -51,8 +63,14 @@ export default function CoursesList({
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
                 <h3 className="text-base font-semibold text-primary-900">
-                  {it.title}
+                  {displayText(it.title, it.defaultLanguage) || it.id}
                 </h3>
+                <LocaleChips
+                  className="mt-1"
+                  languages={localesOf(it.title)}
+                  defaultLanguage={it.defaultLanguage}
+                  onAdd={(locale) => onEdit(it, locale)}
+                />
                 {it.categoryId && (
                   <p className="text-xs text-primary-600">
                     {categoryLookup[it.categoryId] ?? it.categoryId}
@@ -70,9 +88,9 @@ export default function CoursesList({
               </span>
             </div>
 
-            {it.description && (
+            {displayText(it.description, it.defaultLanguage) && (
               <p className="mt-2 line-clamp-2 text-sm text-primary-800">
-                {it.description}
+                {displayText(it.description, it.defaultLanguage)}
               </p>
             )}
 
@@ -114,7 +132,7 @@ export default function CoursesList({
               id: {it.id}
             </p>
 
-            <div className="mt-4 flex items-center justify-between gap-2">
+            <div className="mt-4 flex items-center gap-2">
               <button
                 type="button"
                 onClick={() => onOpenLessons(it)}
@@ -125,50 +143,60 @@ export default function CoursesList({
                   {counts.total}
                 </span>
               </button>
-              <div className="flex gap-2">
-                {it.status === "published" ? (
-                  <button
-                    type="button"
-                    onClick={() => onUnpublish(it)}
-                    disabled={publishingId === it.id}
-                    className="rounded-md border border-gray-400 bg-white px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-                  >
-                    Unpublish
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => onPublish(it)}
-                    disabled={publishingId === it.id}
-                    className="rounded-md border border-emerald-600 bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {publishingId === it.id ? "Checking..." : "Publish"}
-                  </button>
-                )}
-                <AppButton
-                  variant={AppButtonVariant.Edit}
+              {onNotify && (
+                <NotifyButton
+                  onClick={() => onNotify(it)}
+                  // A draft course is not in the app yet, so a tap would
+                  // land on nothing.
+                  disabled={notifying || it.status !== "published"}
                   className="px-3 py-1 text-xs"
-                  onClick={() => onEdit(it)}
+                  title={
+                    it.status === "published"
+                      ? "Send notification"
+                      : "Publish the course before notifying"
+                  }
+                />
+              )}
+            </div>
+
+            <div className="mt-2 flex flex-wrap justify-end gap-2">
+              {it.status === "published" ? (
+                <button
+                  type="button"
+                  onClick={() => onUnpublish(it)}
+                  disabled={publishingId === it.id}
+                  className="rounded-md border border-gray-400 bg-white px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
                 >
-                  Edit
-                </AppButton>
-                <AppButton
-                  variant={AppButtonVariant.Delete}
-                  className="px-3 py-1 text-xs"
-                  onClick={() => onDelete(it.id)}
+                  Unpublish
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => onPublish(it)}
+                  disabled={publishingId === it.id}
+                  className="rounded-md border border-emerald-600 bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  Delete
-                </AppButton>
-              </div>
+                  {publishingId === it.id ? "Checking..." : "Publish"}
+                </button>
+              )}
+              <AppButton
+                variant={AppButtonVariant.Edit}
+                className="px-3 py-1 text-xs"
+                onClick={() => onEdit(it)}
+              >
+                Edit
+              </AppButton>
+              <AppButton
+                variant={AppButtonVariant.Delete}
+                className="px-3 py-1 text-xs"
+                onClick={() => onDelete(it.id)}
+              >
+                Delete
+              </AppButton>
             </div>
           </div>
         );
       })}
-      {items.length === 0 && (
-        <div className="col-span-full py-8 text-center text-primary-600">
-          No courses yet.
-        </div>
-      )}
     </div>
   );
 }
