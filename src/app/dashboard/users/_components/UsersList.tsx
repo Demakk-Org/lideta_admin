@@ -21,6 +21,7 @@ export default function UsersList({
             <tr>
               <th className="px-4 py-2 text-left text-xs font-semibold text-primary-700">User</th>
               <th className="px-4 py-2 text-left text-xs font-semibold text-primary-700">Email</th>
+              <th className="px-4 py-2 text-left text-xs font-semibold text-primary-700">Phone</th>
               <th className="px-4 py-2 text-left text-xs font-semibold text-primary-700">Age</th>
               <th className="px-4 py-2 text-left text-xs font-semibold text-primary-700">Role</th>
               <th className="px-4 py-2 text-left text-xs font-semibold text-primary-700">Actions</th>
@@ -47,6 +48,9 @@ export default function UsersList({
                   </div>
                 </td>
                 <td className="px-4 py-2 text-sm text-primary-700">{it.email || "-"}</td>
+                <td className="px-4 py-2 text-sm text-primary-700 whitespace-nowrap">
+                  {it.phoneNumber || "-"}
+                </td>
                 <td className="px-4 py-2 text-sm text-primary-700 whitespace-nowrap">
                   {typeof it.age === "number" ? it.age : "-"}
                 </td>
@@ -75,7 +79,7 @@ export default function UsersList({
             ))}
             {items.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-4 py-6 text-center text-sm text-primary-700">
+                <td colSpan={6} className="px-4 py-6 text-center text-sm text-primary-700">
                   {loading ? "Loading..." : "No users found."}
                 </td>
               </tr>

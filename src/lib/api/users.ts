@@ -8,6 +8,7 @@ export enum UserRole {
 export type UserDoc = {
   name: string;
   email: string; // not editable via admin UI
+  phoneNumber?: string;
   age?: number;
   imageUrl?: string;
   role?: UserRole; // undefined => not admin
@@ -36,6 +37,12 @@ export async function listUsers(): Promise<WithId<UserDoc>[]> {
       const it: UserDoc = {
         name: String(data['name'] ?? ''),
         email: String(data['email'] ?? ''),
+        phoneNumber:
+          typeof data['phoneNumber'] === 'string'
+            ? (data['phoneNumber'] as string)
+            : typeof data['phone'] === 'string'
+              ? (data['phone'] as string)
+              : undefined,
         age: normalizeNumber(data['age']),
         imageUrl: typeof data['imageUrl'] === 'string' ? (data['imageUrl'] as string) : undefined,
         role: normalizeRole(data['role']),
