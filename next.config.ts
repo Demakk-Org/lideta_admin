@@ -4,7 +4,8 @@ import type { NextConfig } from "next";
 // from its own domain, so every request it makes here is cross-origin and needs
 // CORS; native builds are unaffected. Comma-separated, overridable per env.
 const APP_WEB_ORIGINS = (
-  process.env.APP_WEB_ORIGINS ?? 'https://new-church-project.vercel.app'
+  process.env.APP_WEB_ORIGINS ??
+  'https://app.lidetamekaneyesus.com,https://new-church-project.vercel.app'
 )
   .split(',')
   .map((o) => o.trim())
