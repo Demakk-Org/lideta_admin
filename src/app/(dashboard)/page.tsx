@@ -33,20 +33,20 @@ const featureGroups: FeatureGroup[] = [
     features: [
       {
         name: 'Daily Bible Verse',
-        href: '/dashboard/daily-verse',
+        href: '/daily-verse',
         description:
           'Schedule the verse of the day on the Ethiopian calendar view.',
         icon: BookOpenIcon,
       },
       {
         name: 'Bibles',
-        href: '/dashboard/bibles',
+        href: '/bibles',
         description: 'Manage Bible translations available in the app.',
         icon: BookOpenIcon,
       },
       {
         name: 'Books',
-        href: '/dashboard/books',
+        href: '/books',
         description: 'Manage the digital library of books and readings.',
         icon: BookOpenIcon,
       },
@@ -57,19 +57,19 @@ const featureGroups: FeatureGroup[] = [
     features: [
       {
         name: 'Bible Studies',
-        href: '/dashboard/bible-studies',
+        href: '/bible-studies',
         description: 'Create and publish study lessons for the congregation.',
         icon: DocumentTextIcon,
       },
       {
         name: 'Bible Study Categories',
-        href: '/dashboard/bible-study-categories',
+        href: '/bible-study-categories',
         description: 'Organize studies into categories shown in the app.',
         icon: DocumentTextIcon,
       },
       {
         name: 'Bible Study Groups',
-        href: '/dashboard/bible-study-groups',
+        href: '/bible-study-groups',
         description: 'Manage study groups, their leaders and members.',
         icon: UserGroupIcon,
       },
@@ -80,19 +80,19 @@ const featureGroups: FeatureGroup[] = [
     features: [
       {
         name: 'News',
-        href: '/dashboard/news',
+        href: '/news',
         description: 'Publish announcements and push notifications.',
         icon: NewspaperIcon,
       },
       {
         name: 'Events',
-        href: '/dashboard/events',
+        href: '/events',
         description: 'Schedule church events and manage their details.',
         icon: CalendarDaysIcon,
       },
       {
         name: 'Event Categories',
-        href: '/dashboard/event-categories',
+        href: '/event-categories',
         description: 'Group events into categories for easier browsing.',
         icon: CalendarDaysIcon,
       },
@@ -103,25 +103,25 @@ const featureGroups: FeatureGroup[] = [
     features: [
       {
         name: 'Courses',
-        href: '/dashboard/courses',
+        href: '/courses',
         description: 'Build courses with lessons and track their content.',
         icon: AcademicCapIcon,
       },
       {
         name: 'Course Categories',
-        href: '/dashboard/course-categories',
+        href: '/course-categories',
         description: 'Organize courses into categories.',
         icon: AcademicCapIcon,
       },
       {
         name: 'Quizzes',
-        href: '/dashboard/quizzes',
+        href: '/quizzes',
         description: 'Create quizzes and manage their questions.',
         icon: QuestionMarkCircleIcon,
       },
       {
         name: 'Quiz Categories',
-        href: '/dashboard/quiz-categories',
+        href: '/quiz-categories',
         description: 'Organize quizzes into categories.',
         icon: QuestionMarkCircleIcon,
       },
@@ -132,13 +132,13 @@ const featureGroups: FeatureGroup[] = [
     features: [
       {
         name: 'Audios',
-        href: '/dashboard/audios',
+        href: '/audios',
         description: 'Upload sermons, hymns and other audio content.',
         icon: SpeakerWaveIcon,
       },
       {
         name: 'Videos',
-        href: '/dashboard/videos',
+        href: '/videos',
         description: 'Manage video teachings and recordings.',
         icon: VideoCameraIcon,
       },
@@ -149,7 +149,7 @@ const featureGroups: FeatureGroup[] = [
     features: [
       {
         name: 'Users',
-        href: '/dashboard/users',
+        href: '/users',
         description: 'Review app accounts, roles and access.',
         icon: UsersIcon,
       },

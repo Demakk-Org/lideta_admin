@@ -18,7 +18,7 @@ export default function LoginPage() {
     
     try {
       await loginWithEmail(email, password);
-      router.push('/dashboard');
+      router.push('/');
     } catch {
       toast.error('Invalid credentials. Please try again.');
       setIsLoading(false);

@@ -41,8 +41,20 @@ const nextConfig: NextConfig = {
   async redirects() {
     return [
       {
+        source: "/today-verse",
+        destination: "/daily-verse",
+        permanent: true,
+      },
+      // Pages moved out of the old /dashboard prefix; keep old links working.
+      { source: "/dashboard", destination: "/", permanent: true },
+      {
         source: "/dashboard/today-verse",
-        destination: "/dashboard/daily-verse",
+        destination: "/daily-verse",
+        permanent: true,
+      },
+      {
+        source: "/dashboard/:path*",
+        destination: "/:path*",
         permanent: true,
       },
     ];
