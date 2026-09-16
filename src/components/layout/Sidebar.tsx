@@ -23,55 +23,55 @@ import ThemeToggle from '@/components/ui/ThemeToggle';
 
 const navigation = [
   // `exact` keeps the overview from staying highlighted on every sub-route.
-  { name: 'Overview', href: '/dashboard', icon: Squares2X2Icon, exact: true },
+  { name: 'Overview', href: '/', icon: Squares2X2Icon, exact: true },
   {
     name: 'Daily Bible Verse',
-    href: '/dashboard/daily-verse',
+    href: '/daily-verse',
     icon: BookOpenIcon,
   },
-  { name: 'Bibles', href: '/dashboard/bibles', icon: BookOpenIcon },
-  { name: 'Books', href: '/dashboard/books', icon: BookOpenIcon },
+  { name: 'Bibles', href: '/bibles', icon: BookOpenIcon },
+  { name: 'Books', href: '/books', icon: BookOpenIcon },
   {
     name: 'Bible Studies',
-    href: '/dashboard/bible-studies',
+    href: '/bible-studies',
     icon: DocumentTextIcon,
   },
   {
     name: 'Bible Study Categories',
-    href: '/dashboard/bible-study-categories',
+    href: '/bible-study-categories',
     icon: DocumentTextIcon,
   },
   {
     name: 'Bible Study Groups',
-    href: '/dashboard/bible-study-groups',
+    href: '/bible-study-groups',
     icon: UserGroupIcon,
   },
-  { name: 'News', href: '/dashboard/news', icon: NewspaperIcon },
-  { name: 'Events', href: '/dashboard/events', icon: CalendarDaysIcon },
+  { name: 'News', href: '/news', icon: NewspaperIcon },
+  { name: 'Events', href: '/events', icon: CalendarDaysIcon },
   {
     name: 'Event Categories',
-    href: '/dashboard/event-categories',
+    href: '/event-categories',
     icon: CalendarDaysIcon,
   },
-  { name: 'Courses', href: '/dashboard/courses', icon: AcademicCapIcon },
+  { name: 'Courses', href: '/courses', icon: AcademicCapIcon },
   {
     name: 'Course Categories',
-    href: '/dashboard/course-categories',
+    href: '/course-categories',
     icon: AcademicCapIcon,
   },
-  { name: 'Quizzes', href: '/dashboard/quizzes', icon: QuestionMarkCircleIcon },
+  { name: 'Quizzes', href: '/quizzes', icon: QuestionMarkCircleIcon },
   {
     name: 'Quiz Categories',
-    href: '/dashboard/quiz-categories',
+    href: '/quiz-categories',
     icon: QuestionMarkCircleIcon,
   },
-  { name: 'Audios', href: '/dashboard/audios', icon: SpeakerWaveIcon },
-  { name: 'Videos', href: '/dashboard/videos', icon: VideoCameraIcon },
-  { name: 'Users', href: '/dashboard/users', icon: UsersIcon },
-  { name: 'Reports', href: '/dashboard/reports', icon: FlagIcon },
+  { name: 'Audios', href: '/audios', icon: SpeakerWaveIcon },
+  { name: 'Videos', href: '/videos', icon: VideoCameraIcon },
+  { name: 'Users', href: '/users', icon: UsersIcon },
+  { name: 'Reports', href: '/reports', icon: FlagIcon },
   {
     name: 'Deletion Requests',
-    href: '/dashboard/deletion-requests',
+    href: '/deletion-requests',
     icon: TrashIcon,
   },
 ];
@@ -83,7 +83,7 @@ export default function Sidebar() {
   const handleSignOut = async () => {
     try {
       await signOutUser();
-      router.replace('/');
+      router.replace('/login');
     } catch {
       toast.error('Sign out failed');
     }

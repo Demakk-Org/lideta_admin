@@ -9,8 +9,8 @@ export const metadata: Metadata = {
 
 /**
  * The public account-deletion request page. Google Play requires this URL to be
- * reachable without signing in, so it sits outside `/dashboard` and outside the
- * middleware matcher.
+ * reachable without signing in, so it is listed as a public path in
+ * the middleware.
  */
 export default function DeleteAccountPage() {
   return (
