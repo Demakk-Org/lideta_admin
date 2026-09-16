@@ -1,9 +1,9 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { LockClosedIcon, EnvelopeIcon } from '@heroicons/react/24/outline';
-import { loginWithEmail } from '@/lib/api/auth';
+import { NotAdminLoginError, loginWithEmail } from '@/lib/api/auth';
 import toast from 'react-hot-toast';
 
 export default function LoginPage() {
@@ -11,6 +11,20 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
+  const reason = useSearchParams().get('reason');
+
+  useEffect(() => {
+    // A fixed id keeps Strict Mode's double effect run from stacking toasts.
+    if (reason === 'forbidden') {
+      toast.error('This account does not have administrator access.', {
+        id: 'login-reason',
+      });
+    } else if (reason === 'expired') {
+      toast.error('Your session has expired. Please sign in again.', {
+        id: 'login-reason',
+      });
+    }
+  }, [reason]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -19,8 +33,14 @@ export default function LoginPage() {
     try {
       await loginWithEmail(email, password);
       router.push('/');
-    } catch {
-      toast.error('Invalid credentials. Please try again.');
+    } catch (err) {
+      toast.error(
+        err instanceof NotAdminLoginError
+          ? 'This account does not have administrator access.'
+          : err instanceof Error
+            ? err.message
+            : 'Failed to sign in. Please try again.',
+      );
       setIsLoading(false);
     }
   };

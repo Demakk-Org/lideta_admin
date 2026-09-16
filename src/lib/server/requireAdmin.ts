@@ -17,14 +17,28 @@ export class NotAdminError extends Error {
   }
 }
 
+/** Throws a 403 unless `users/{uid}` carries role ADMIN. */
+export async function assertAdminRole(
+  uid: string,
+  routeName: string,
+): Promise<void> {
+  const profile = await adminDb.collection('users').doc(uid).get();
+  const role = String(profile.data()?.role ?? '').toUpperCase();
+  if (role !== 'ADMIN') {
+    Logger.error(routeName, 'Rejected a non-admin caller', { uid });
+    throw new NotAdminError('Administrator access required', 403);
+  }
+}
+
 /**
- * Proves the caller is a signed-in administrator, for routes that do something
- * irreversible.
+ * Proves the caller is a signed-in administrator.
  *
  * `middleware.ts` only checks that a `token` cookie is *present*, and it does
- * not run on `/api` at all — so an API route that deletes accounts cannot lean
- * on it. This verifies the ID token's signature and expiry with the admin SDK
- * and then checks the caller's own `users/{uid}` document carries role ADMIN.
+ * not run on `/api` at all — so neither the dashboard layout nor an API route
+ * that deletes accounts can lean on it. This verifies the Firebase session
+ * cookie minted by `/api/session` (signature, expiry, revocation) and then
+ * re-checks the caller's own `users/{uid}` document still carries role ADMIN,
+ * so demoting a user locks them out on their next request.
  */
 export async function requireAdmin(routeName: string): Promise<AdminIdentity> {
   const token = (await cookies()).get('token')?.value;
@@ -35,7 +49,7 @@ export async function requireAdmin(routeName: string): Promise<AdminIdentity> {
   let uid: string;
   let email: string | undefined;
   try {
-    const decoded = await adminAuth.verifyIdToken(token);
+    const decoded = await adminAuth.verifySessionCookie(token, true);
     uid = decoded.uid;
     email = decoded.email;
   } catch (error) {
@@ -45,12 +59,6 @@ export async function requireAdmin(routeName: string): Promise<AdminIdentity> {
     throw new NotAdminError('Session expired, sign in again', 401);
   }
 
-  const profile = await adminDb.collection('users').doc(uid).get();
-  const role = String(profile.data()?.role ?? '').toUpperCase();
-  if (role !== 'ADMIN') {
-    Logger.error(routeName, 'Rejected a non-admin caller', { uid });
-    throw new NotAdminError('Administrator access required', 403);
-  }
-
+  await assertAdminRole(uid, routeName);
   return { uid, email };
 }
