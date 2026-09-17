@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
+import { ChevronDownIcon } from '@heroicons/react/24/outline';
 import { useAppDispatch, useAppSelector } from '@/lib/redux/store';
 import AppButton, { AppButtonVariant } from '@/components/ui/AppButton';
 import AppModal from '@/components/ui/AppModal';
@@ -21,6 +22,7 @@ import {
   FEATURE_KEYS,
   getFeature,
   isFeatureKey,
+  type FeatureGroup,
   type FeatureKey,
 } from '@/lib/featureKeys';
 import {
@@ -152,6 +154,15 @@ export default function AppFeaturesClient() {
   const [publishOpen, setPublishOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [stale, setStale] = useState<string | null>(null);
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<FeatureGroup>>(new Set());
+
+  const toggleGroup = (group: FeatureGroup) =>
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(group)) next.delete(group);
+      else next.add(group);
+      return next;
+    });
 
   const resetEdits = () => {
     setEdits({});
@@ -589,82 +600,139 @@ export default function AppFeaturesClient() {
                     </div>
                   )}
 
+                  <div className="flex justify-end gap-3 text-xs">
+                    <button
+                      type="button"
+                      onClick={() => setCollapsedGroups(new Set())}
+                      className="cursor-pointer font-medium text-primary-600 hover:text-primary-800 hover:underline"
+                    >
+                      Expand all
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCollapsedGroups(new Set(FEATURE_GROUPS.map((g) => g.key)))}
+                      className="cursor-pointer font-medium text-primary-600 hover:text-primary-800 hover:underline"
+                    >
+                      Collapse all
+                    </button>
+                  </div>
+
                   {FEATURE_GROUPS.map((group) => {
                     const features = FEATURES.filter((f) => f.group === group.key);
                     if (features.length === 0) return null;
+                    const open = !collapsedGroups.has(group.key);
+                    const keys = features.map((f) => f.key as string);
+                    const onCount = keys.filter((k) => isOn(draft, k)).length;
+                    const unsavedInGroup = keys.filter((k) => unsaved[k]).length;
+                    const problemsInGroup = violations.filter((v) => keys.includes(v.key)).length;
+                    const listId = `feature-group-${group.key}`;
                     return (
                       <section
                         key={group.key}
                         className="overflow-hidden rounded-md border border-primary-200 bg-white"
                       >
-                        <h3 className="border-b border-primary-100 px-4 py-2 text-sm font-semibold text-primary-800">
-                          {group.label}{' '}
-                          <span className="font-normal text-primary-600">· {group.labelAm}</span>
+                        <h3>
+                          <button
+                            type="button"
+                            aria-expanded={open}
+                            aria-controls={listId}
+                            onClick={() => toggleGroup(group.key)}
+                            className={`flex w-full cursor-pointer items-center gap-2 px-4 py-2 text-left text-sm font-semibold text-primary-800 hover:bg-primary-50 ${
+                              open ? 'border-b border-primary-100' : ''
+                            }`}
+                          >
+                            <span className="min-w-0 flex-1">
+                              {group.label}{' '}
+                              <span className="font-normal text-primary-600">· {group.labelAm}</span>
+                              <span className="ml-2 font-normal text-primary-600">
+                                {onCount}/{features.length} on
+                              </span>
+                            </span>
+                            {/* Collapsed groups still flag what's inside them. */}
+                            {!open && unsavedInGroup > 0 && (
+                              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
+                                {unsavedInGroup} unsaved
+                              </span>
+                            )}
+                            {!open && problemsInGroup > 0 && (
+                              <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-800">
+                                {problemsInGroup} {problemsInGroup === 1 ? 'problem' : 'problems'}
+                              </span>
+                            )}
+                            <ChevronDownIcon
+                              aria-hidden="true"
+                              className={`h-4 w-4 shrink-0 text-primary-500 transition-transform ${
+                                open ? 'rotate-180' : ''
+                              }`}
+                            />
+                          </button>
                         </h3>
                         {/*
                           Two columns on wide screens. Each row draws its own bottom
                           border (and a right border in the left column); `-mb-px`
                           tucks the last row's border under the section's edge.
                         */}
-                        <ul className="-mb-px grid xl:grid-cols-2">
-                          {features.map((feature) => {
-                            const key = feature.key as FeatureKey;
-                            const change = unsaved[key];
-                            const differs = !isPublished && published.exists && vsPublished[key];
-                            const violation = violations.find((v) => v.key === key);
-                            return (
-                              <li
-                                key={key}
-                                className={`flex items-start gap-4 border-b border-primary-100 px-4 py-3 xl:odd:border-r ${
-                                  change ? 'bg-amber-50' : ''
-                                }`}
-                              >
-                                <div className="pt-0.5">
-                                  <Switch
-                                    checked={isOn(draft, key)}
-                                    label={feature.label}
-                                    disabled={saving || !editable}
-                                    onChange={(next) => handleToggle(key, next)}
-                                  />
-                                </div>
-                                <div className="min-w-0 flex-1">
-                                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                                    <span className="font-medium text-primary-900">
-                                      {feature.label}
-                                    </span>
-                                    <span className="text-sm text-primary-600">
-                                      {feature.labelAm}
-                                    </span>
-                                    <code className="text-xs text-primary-500">{key}</code>
-                                    {change && (
-                                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
-                                        Unsaved: <ChangeText change={change} />
+                        {open && (
+                          <ul id={listId} className="-mb-px grid xl:grid-cols-2">
+                            {features.map((feature) => {
+                              const key = feature.key as FeatureKey;
+                              const change = unsaved[key];
+                              const differs = !isPublished && published.exists && vsPublished[key];
+                              const violation = violations.find((v) => v.key === key);
+                              return (
+                                <li
+                                  key={key}
+                                  className={`flex items-start gap-4 border-b border-primary-100 px-4 py-3 xl:odd:border-r ${
+                                    change ? 'bg-amber-50' : ''
+                                  }`}
+                                >
+                                  <div className="pt-0.5">
+                                    <Switch
+                                      checked={isOn(draft, key)}
+                                      label={feature.label}
+                                      disabled={saving || !editable}
+                                      onChange={(next) => handleToggle(key, next)}
+                                    />
+                                  </div>
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                                      <span className="font-medium text-primary-900">
+                                        {feature.label}
                                       </span>
+                                      <span className="text-sm text-primary-600">
+                                        {feature.labelAm}
+                                      </span>
+                                      <code className="text-xs text-primary-500">{key}</code>
+                                      {change && (
+                                        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
+                                          Unsaved: <ChangeText change={change} />
+                                        </span>
+                                      )}
+                                      {differs && (
+                                        <span className="rounded-full bg-sky-100 px-2 py-0.5 text-xs font-semibold text-sky-800">
+                                          Published: {stateText(differs.from)}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <p className="text-sm text-primary-700">{feature.description}</p>
+                                    {feature.dependsOn.length > 0 && (
+                                      <p className="mt-1 text-xs text-primary-600">
+                                        Requires: {listLabels(feature.dependsOn)}
+                                      </p>
                                     )}
-                                    {differs && (
-                                      <span className="rounded-full bg-sky-100 px-2 py-0.5 text-xs font-semibold text-sky-800">
-                                        Published: {stateText(differs.from)}
-                                      </span>
+                                    {violation && (
+                                      <p className="mt-1 text-xs font-medium text-red-700">
+                                        On, but {listLabels(violation.missing)}{' '}
+                                        {violation.missing.length === 1 ? 'is' : 'are'} off, so
+                                        it won&apos;t work in the app.
+                                      </p>
                                     )}
                                   </div>
-                                  <p className="text-sm text-primary-700">{feature.description}</p>
-                                  {feature.dependsOn.length > 0 && (
-                                    <p className="mt-1 text-xs text-primary-600">
-                                      Requires: {listLabels(feature.dependsOn)}
-                                    </p>
-                                  )}
-                                  {violation && (
-                                    <p className="mt-1 text-xs font-medium text-red-700">
-                                      On, but {listLabels(violation.missing)}{' '}
-                                      {violation.missing.length === 1 ? 'is' : 'are'} off, so
-                                      it won&apos;t work in the app.
-                                    </p>
-                                  )}
-                                </div>
-                              </li>
-                            );
-                          })}
-                        </ul>
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        )}
                       </section>
                     );
                   })}
