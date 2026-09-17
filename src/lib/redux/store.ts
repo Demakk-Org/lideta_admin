@@ -21,6 +21,7 @@ import quizCategoriesReducer from './features/quizCategoriesSlice';
 import coursesReducer from './features/coursesSlice';
 import lessonsReducer from './features/lessonsSlice';
 import courseCategoriesReducer from './features/courseCategoriesSlice';
+import appSettingsReducer from './features/appSettingsSlice';
 
 // Import your reducers here
 // import someReducer from './features/someFeature/someSlice';
@@ -58,6 +59,7 @@ export const store = configureStore({
     courseCategories: courseCategoriesReducer,
     deletionRequests: deletionRequestsReducer,
     reports: reportsReducer,
+    appSettings: appSettingsReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({

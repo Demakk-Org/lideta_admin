@@ -10,7 +10,8 @@
     "test": "vitest run",
     "migrate:course-order": "node --env-file=.env scripts/migrate-course-order-to-createdat.mjs",
     "migrate:course-translations-v2": "node --env-file=.env scripts/migrate-course-translations-v2.mjs",
-    "apply:course-translation": "node --env-file=.env scripts/apply-course-translation.mjs"
+    "apply:course-translation": "node --env-file=.env scripts/apply-course-translation.mjs",
+    "seed:app-settings": "node --env-file=.env --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/seed-app-settings.mjs"
   },
   "dependencies": {
     "@heroicons/react": "^2.2.0",

@@ -71,6 +71,104 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
+    // Feature switches. Readable by anyone, signed in or not: the app reads
+    // them at the splash screen, before login. Only admins write, and every
+    // write must bump `version` by exactly one so two admins saving at once
+    // can't silently overwrite each other.
+    // App feature control. The app reads ONLY `app_settings/published`.
+    // Admins edit numbered versions and publish one; the publish is a single
+    // transaction that copies the version's features here, marks it published,
+    // archives the previous one and logs it. getAfter() ties those writes
+    // together, so the published doc can't hold features no version has.
+    match /app_settings/published {
+      function validPublished() {
+        let d = request.resource.data;
+        let v = getAfter(/databases/$(db)/documents/app_settings/published/versions/$(string(d.version))).data;
+        return d.keys().hasOnly(['features', 'version', 'updatedAt', 'publishedBy'])
+          && d.features is map
+          && d.version is int
+          && d.updatedAt == request.time
+          && d.publishedBy == request.auth.uid
+          && v.status == 'published'
+          && v.features == d.features;
+      }
+
+      // Read at the splash screen, before sign-in.
+      allow read: if true;
+      allow create, update: if isAdmin() && validPublished();
+
+      // Doc id is the version number. Only drafts can change features or be
+      // deleted; published and archived versions only move between statuses.
+      match /versions/{versionId} {
+        function publishedVersionAfter() {
+          return getAfter(/databases/$(db)/documents/app_settings/published).data.version;
+        }
+
+        allow read: if isAdmin();
+
+        allow create: if isAdmin()
+          && request.resource.data.keys().hasOnly([
+               'version', 'status', 'features', 'note', 'basedOn', 'revision',
+               'createdBy', 'createdAt', 'updatedBy', 'updatedAt'])
+          && request.resource.data.version == int(versionId)
+          && request.resource.data.status == 'draft'
+          && request.resource.data.features is map
+          && request.resource.data.note is string
+          && (request.resource.data.basedOn == null || request.resource.data.basedOn is int)
+          && request.resource.data.revision == 1
+          && request.resource.data.createdBy == request.auth.uid
+          && request.resource.data.createdAt == request.time
+          && request.resource.data.updatedBy == request.auth.uid
+          && request.resource.data.updatedAt == request.time;
+
+        allow update: if isAdmin() && (
+          // Save a draft.
+          (resource.data.status == 'draft'
+            && request.resource.data.diff(resource.data).affectedKeys()
+                 .hasOnly(['features', 'note', 'revision', 'updatedBy', 'updatedAt'])
+            && request.resource.data.features is map
+            && request.resource.data.note is string
+            && request.resource.data.revision == resource.data.revision + 1
+            && request.resource.data.updatedBy == request.auth.uid
+            && request.resource.data.updatedAt == request.time)
+          // Publish a draft, or publish an archived version again (rollback).
+          || (resource.data.status in ['draft', 'archived']
+            && request.resource.data.status == 'published'
+            && request.resource.data.diff(resource.data).affectedKeys()
+                 .hasOnly(['status', 'publishedBy', 'publishedAt'])
+            && request.resource.data.publishedBy == request.auth.uid
+            && request.resource.data.publishedAt == request.time
+            && publishedVersionAfter() == resource.data.version)
+          // Archive the version another publish replaced.
+          || (resource.data.status == 'published'
+            && request.resource.data.status == 'archived'
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
+            && publishedVersionAfter() != resource.data.version)
+        );
+
+        allow delete: if isAdmin() && resource.data.status == 'draft';
+      }
+
+      // Publish log, append-only.
+      match /history/{entryId} {
+        allow read: if isAdmin();
+        allow create: if isAdmin()
+          && request.resource.data.keys().hasOnly(['version', 'fromVersion', 'changed', 'publishedBy', 'publishedAt'])
+          && request.resource.data.changed is map
+          && (request.resource.data.fromVersion == null || request.resource.data.fromVersion is int)
+          && request.resource.data.publishedBy == request.auth.uid
+          && request.resource.data.publishedAt == request.time
+          && request.resource.data.version ==
+               getAfter(/databases/$(db)/documents/app_settings/published).data.version;
+      }
+    }
+
+    // Pre-versioning single document. Read-only; the seed imports it as the
+    // first version. Remove once no released app build reads it.
+    match /app_settings/default {
+      allow read: if true;
+    }
+
     // A message may be deleted by its sender OR by the leader of its group.
     match /bible_study_groups/{groupId}/bible_studies/{studyId}/messages/{messageId} {
       allow delete: if request.auth != null && (
