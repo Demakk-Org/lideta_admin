@@ -20,6 +20,12 @@
   --color-primary-700: #085874;
   --color-primary-800: #06455c;
   --color-primary-900: #043243;
+
+  /* Church logo navy, sampled from the mark in `public/logo.png`. Used for the
+     branded surfaces the logo sits on (login backdrop, sidebar header). */
+  --color-brand-500: #0a54b0;
+  --color-brand-700: #043b7e;
+  --color-brand-900: #02275a;
 }
 
 @theme inline {
