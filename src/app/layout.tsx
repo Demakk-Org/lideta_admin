@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata = {
-  title: 'Admin Dashboard',
-  description: 'A modern admin dashboard with Next.js and Firebase',
+  title: 'Lideta Mekane Yesus · Admin',
+  description: 'Admin dashboard for the Lideta Mekane Yesus church app',
 };
 
 export default function RootLayout({

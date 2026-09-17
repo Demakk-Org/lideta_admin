@@ -21,6 +21,7 @@ import {
 import toast from 'react-hot-toast';
 import { signOutUser } from '@/lib/api/auth';
 import ThemeToggle from '@/components/ui/ThemeToggle';
+import Logo from '@/components/ui/Logo';
 
 const navigation = [
   // `exact` keeps the overview from staying highlighted on every sub-route.
@@ -97,11 +98,17 @@ export default function Sidebar() {
 
   return (
     <div className='flex min-h-0 flex-1 flex-col border-r border-primary-100 bg-primary-50'>
-      <div className='flex flex-1 flex-col overflow-y-auto pt-5 pb-4'>
-        <div className='flex flex-shrink-0 items-center px-4'>
-          <h1 className='text-2xl font-bold text-primary-700'>Admin Panel</h1>
+      {/* Brand header sits outside the scroll container so it stays pinned
+          while the nav list scrolls under it. */}
+      <div className='flex flex-shrink-0 items-center gap-3 border-b border-primary-100 px-4 pt-5 pb-4'>
+        <Logo size={36} priority />
+        <div className='leading-tight'>
+          <h1 className='text-xl font-bold text-primary-700'>Admin Panel</h1>
+          <p className='text-xs text-primary-400'>Lideta Mekane Yesus</p>
         </div>
-        <nav className='mt-5 flex-1 space-y-1 bg-primary-50 px-2'>
+      </div>
+      <div className='flex min-h-0 flex-1 flex-col overflow-y-auto pt-4 pb-4'>
+        <nav className='flex-1 space-y-1 bg-primary-50 px-2'>
           {navigation.map((item) => {
             const isActive = item.exact
               ? pathname === item.href

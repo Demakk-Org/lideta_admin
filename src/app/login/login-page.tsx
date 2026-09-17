@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Image from 'next/image';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { LockClosedIcon, EnvelopeIcon } from '@heroicons/react/24/outline';
 import { NotAdminLoginError, loginWithEmail } from '@/lib/api/auth';
@@ -46,17 +47,41 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-primary-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
-      <div className="sm:mx-auto sm:w-full sm:max-w-md">
-        <h2 className="mt-6 text-center text-3xl font-extrabold text-primary-800">
+    <div className="relative min-h-screen bg-gradient-to-b from-brand-700 to-brand-900 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8">
+      {/* The mark, blown up and barely visible, as the page's backdrop. */}
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
+        <Image
+          src="/logo.png"
+          alt=""
+          width={613}
+          height={756}
+          priority
+          className="absolute -left-16 -bottom-20 w-[32rem] max-w-none opacity-[0.07] select-none"
+        />
+      </div>
+
+      <div className="relative sm:mx-auto sm:w-full sm:max-w-md">
+        {/* The mark is navy-on-transparent, so it needs a light chip to read
+            against the navy backdrop. */}
+        <div className="mx-auto flex h-28 w-28 items-center justify-center rounded-2xl bg-[#ffffff] shadow-xl">
+          <Image
+            src="/logo.png"
+            alt="Lideta Mekane Yesus church logo"
+            width={613}
+            height={756}
+            priority
+            className="h-20 w-auto"
+          />
+        </div>
+        <h2 className="mt-6 text-center text-3xl font-extrabold text-[#ffffff]">
           Admin Dashboard
         </h2>
-        <p className="mt-2 text-center text-sm text-primary-700">
+        <p className="mt-2 text-center text-sm text-[#ffffff]/70">
           Sign in to your admin account
         </p>
       </div>
 
-      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
+      <div className="relative mt-8 sm:mx-auto sm:w-full sm:max-w-md">
         <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
           <form className="space-y-6" onSubmit={handleSubmit}>
             <div>
@@ -127,7 +152,7 @@ export default function LoginPage() {
               <button
                 type="submit"
                 disabled={isLoading}
-                className={`w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 ${isLoading ? 'opacity-70 cursor-not-allowed' : ''}`}
+                className={`w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-[#ffffff] bg-brand-700 hover:bg-brand-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-500 ${isLoading ? 'opacity-70 cursor-not-allowed' : ''}`}
               >
                 {isLoading ? 'Signing in...' : 'Sign in'}
               </button>
