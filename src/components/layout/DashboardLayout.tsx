@@ -5,10 +5,13 @@ import Sidebar from './Sidebar';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="relative flex min-h-screen bg-primary-50">
+    // `isolate` keeps the backdrop's negative z-index from escaping this
+    // subtree: it paints above this element's own background but below every
+    // child, so nothing here needs to be lifted above it.
+    <div className="relative isolate flex min-h-screen bg-primary-50">
       {/* Branded backdrop: the mark sits behind the content, faint enough that
           text contrast is untouched, and fixed so it does not scroll away. */}
-      <div aria-hidden="true" className="pointer-events-none fixed inset-0 overflow-hidden">
+      <div aria-hidden="true" className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
         <Image
           src="/logo.png"
           alt=""
@@ -19,12 +22,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         />
       </div>
       {/* Static sidebar for desktop */}
-      <div className="z-10 hidden md:fixed md:inset-y-0 md:flex md:w-64 md:flex-col">
+      <div className="hidden md:fixed md:inset-y-0 md:flex md:w-64 md:flex-col">
         <Sidebar />
       </div>
 
       {/* Main content */}
-      <div className="relative z-10 flex flex-1 flex-col md:pl-64">
+      <div className="flex flex-1 flex-col md:pl-64">
         <main className="flex-1 overflow-y-auto">
           <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
             {children}
