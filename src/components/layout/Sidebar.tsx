@@ -16,6 +16,7 @@ import {
   Squares2X2Icon,
   FlagIcon,
   TrashIcon,
+  AdjustmentsHorizontalIcon,
 } from '@heroicons/react/24/outline';
 import toast from 'react-hot-toast';
 import { signOutUser } from '@/lib/api/auth';
@@ -73,6 +74,11 @@ const navigation = [
     name: 'Deletion Requests',
     href: '/deletion-requests',
     icon: TrashIcon,
+  },
+  {
+    name: 'App Features',
+    href: '/app-features',
+    icon: AdjustmentsHorizontalIcon,
   },
 ];
 
