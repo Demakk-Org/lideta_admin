@@ -448,8 +448,13 @@ export default function AppFeaturesClient() {
                         <button
                           type="button"
                           onClick={() => selectVersion(v.version)}
-                          className={`w-full px-4 py-2 text-left text-sm hover:bg-primary-50 ${
-                            v.version === selected ? 'bg-primary-50' : ''
+                          aria-current={v.version === selected ? 'true' : undefined}
+                          // Same active marker as the side nav. Unselected rows keep a
+                          // transparent border so their text doesn't shift.
+                          className={`w-full cursor-pointer border-l-4 px-4 py-2 text-left text-sm transition-colors ${
+                            v.version === selected
+                              ? 'border-primary-600 bg-primary-100 ring-1 ring-inset ring-primary-200'
+                              : 'border-transparent hover:bg-primary-50'
                           }`}
                         >
                           <div className="flex items-center gap-2">
