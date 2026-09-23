@@ -1,11 +1,13 @@
 import { db } from '@/lib/firebase/config';
 import { bibleVerseFields } from '@/lib/api/quoteVerse';
 import type { BibleVerseFields } from '@/lib/api/quoteVerse';
+import type { Recurrence } from '@/lib/events/recurrence';
 import {
   Timestamp,
   addDoc,
   collection,
   deleteDoc,
+  deleteField,
   doc,
   getDocs,
   query,
@@ -47,6 +49,21 @@ export type EventDoc = {
   short_description?: string;
   tags?: string[];
   description?: EventDescriptionItem[];
+
+  /**
+   * Recurrence lives on the event itself: one document holds the rule and
+   * always shows its NEXT occurrence, which a cron tick advances. There are no
+   * per-date documents. `null` means "stop recurring" and removes the fields.
+   * See docs/RECURRING_EVENTS_V3_PLAN.md.
+   */
+  recurrence?: Recurrence | null;
+  /** False once paused by an admin, or once the rule has run out. */
+  recurrence_active?: boolean;
+  /** 1-based. The only record of how many occurrences have run, since rolling
+   *  overwrites the start date. */
+  recurrence_occurrence?: number;
+  /** Written by the cron only, to keep a reminder from being sent twice. */
+  recurrence_reminded_occurrence?: number;
 };
 
 export type WithId<T> = T & { id: string };
@@ -205,6 +222,80 @@ function normalizeDescription(
   return out;
 }
 
+const RECURRENCE_FREQS = new Set(['weekly', 'monthly']);
+const RECURRENCE_END_MODES = new Set(['never', 'until', 'count']);
+
+function toIntList(raw: unknown, min: number, max: number): number[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out = [
+    ...new Set(
+      raw
+        .map((v) => Number(v))
+        .filter((v) => Number.isInteger(v) && v >= min && v <= max),
+    ),
+  ].sort((a, b) => a - b);
+  return out.length ? out : undefined;
+}
+
+/**
+ * Keeps a rule the cron can trust: the roll runs unattended every 15 minutes,
+ * so a malformed interval or an out-of-range weekday would strand an event
+ * rather than surface an error to anyone.
+ */
+function normalizeRecurrence(raw: unknown): Recurrence | undefined {
+  if (!isRecord(raw)) return undefined;
+
+  const freq = String(raw.freq ?? '').toLowerCase();
+  if (!RECURRENCE_FREQS.has(freq)) return undefined;
+
+  const endModeRaw = String(raw.endMode ?? 'never').toLowerCase();
+  const endMode = RECURRENCE_END_MODES.has(endModeRaw)
+    ? (endModeRaw as Recurrence['endMode'])
+    : 'never';
+
+  const intervalRaw = Number(raw.interval);
+  const interval =
+    Number.isFinite(intervalRaw) && intervalRaw >= 1 ? Math.floor(intervalRaw) : 1;
+
+  const out: Recurrence = {
+    freq: freq as Recurrence['freq'],
+    interval,
+    endMode,
+  };
+
+  if (freq === 'weekly') {
+    const byWeekday = toIntList(raw.byWeekday, 0, 6);
+    if (byWeekday) out.byWeekday = byWeekday;
+  } else {
+    const byMonthDay = toIntList(raw.byMonthDay, 1, 31);
+    if (byMonthDay) out.byMonthDay = byMonthDay;
+  }
+
+  if (endMode === 'until') {
+    const until = toTimestampValue(raw.until);
+    if (until) out.until = until.toDate().toISOString();
+    else out.endMode = 'never';
+  }
+  if (endMode === 'count') {
+    const countRaw = Number(raw.count);
+    if (Number.isFinite(countRaw) && countRaw >= 1) out.count = Math.floor(countRaw);
+    else out.endMode = 'never';
+  }
+
+  const exceptions = Array.isArray(raw.exceptions)
+    ? [
+        ...new Set(
+          raw.exceptions
+            .map((v) => String(v))
+            .filter((v) => /^\d{4}-\d{2}-\d{2}$/.test(v)),
+        ),
+      ].sort()
+    : [];
+  if (exceptions.length) out.exceptions = exceptions;
+
+  return out;
+}
+
 export async function listEvents(): Promise<WithId<EventDoc>[]> {
   console.log('[eventsApi] listEvents: querying...');
   try {
@@ -229,6 +320,7 @@ export async function listEvents(): Promise<WithId<EventDoc>[]> {
           normalizeTimestamp(deadlineRaw) ??
           (typeof deadlineRaw === 'string' ? deadlineRaw : undefined),
         description: normalizeDescription(descRaw),
+        recurrence: normalizeRecurrence(data['recurrence']),
         // Map legacy location shapes to { primary, secondary? }
         location: (() => {
           if (!locRaw) return undefined;
@@ -259,7 +351,7 @@ export async function listEvents(): Promise<WithId<EventDoc>[]> {
   }
 }
 
-function sanitizeEventForWrite(data: Partial<EventDoc>): Partial<EventDoc> {
+export function sanitizeEventForWrite(data: Partial<EventDoc>): Partial<EventDoc> {
   const result: Partial<EventDoc> = { ...data };
   if (Object.prototype.hasOwnProperty.call(result, 'start_date_time')) {
     (result as Record<string, unknown>).start_date_time = toTimestampValue(
@@ -278,12 +370,29 @@ function sanitizeEventForWrite(data: Partial<EventDoc>): Partial<EventDoc> {
   if (result.description) {
     result.description = normalizeDescription(result.description) ?? undefined;
   }
+  if (Object.prototype.hasOwnProperty.call(result, 'recurrence')) {
+    // `null` is the form's way of saying "this is no longer recurring". The
+    // fields are removed rather than left behind, so nothing half-configured
+    // survives for the cron to act on. Safe to delete: unlike the fields in
+    // docs/RECURRING_EVENTS_V3_PLAN.md §3.1, the published app never reads
+    // these, so their absence cannot break the events list.
+    if (result.recurrence === null) {
+      const r = result as Record<string, unknown>;
+      r.recurrence = deleteField();
+      r.recurrence_active = deleteField();
+      r.recurrence_occurrence = deleteField();
+      r.recurrence_reminded_occurrence = deleteField();
+    } else {
+      const normalized = normalizeRecurrence(result.recurrence);
+      if (normalized) result.recurrence = normalized;
+      else delete result.recurrence;
+    }
+  }
   if (Object.prototype.hasOwnProperty.call(result, 'location')) {
     const locRaw = (result as Record<string, unknown>).location;
     let out: { primary: string; secondary?: string } | undefined = undefined;
     if (typeof locRaw === 'string') {
-      const p = locRaw.trim();
-      out = p ? { primary: p } : undefined;
+      out = { primary: locRaw.trim() };
     } else if (isRecord(locRaw)) {
       const p =
         typeof (locRaw as Record<string, unknown>).primary === 'string'
@@ -293,11 +402,32 @@ function sanitizeEventForWrite(data: Partial<EventDoc>): Partial<EventDoc> {
         typeof (locRaw as Record<string, unknown>).secondary === 'string'
           ? ((locRaw as Record<string, unknown>).secondary as string).trim()
           : '';
-      if (p || s) out = { primary: p, ...(s ? { secondary: s } : {}) };
+      // Always an object, even when both parts are blank. The published app
+      // does `Location.fromJson(json['location'] as Map<String, dynamic>)` — a
+      // missing key is `null as Map`, which throws inside the `.map()` over the
+      // whole query, so ONE event saved without a location empties the entire
+      // events list rather than just losing its own venue line. Storing
+      // `{ primary: '' }` is what EventsFormModal's payload comment already
+      // promises; this used to quietly undo it.
+      out = { primary: p, ...(s ? { secondary: s } : {}) };
     }
     (result as Record<string, unknown>).location = out;
   }
   return result;
+}
+
+/**
+ * Firestore rejects `undefined` outright — `addDoc` throws before it reaches the
+ * network — so a caller that omits an optional field would fail with an opaque
+ * error rather than saving. Dropping the key is the correct reading of "not
+ * provided".
+ */
+function stripUndefined<T extends object>(data: T): T {
+  const out = { ...data } as Record<string, unknown>;
+  for (const key of Object.keys(out)) {
+    if (out[key] === undefined) delete out[key];
+  }
+  return out as T;
 }
 
 export async function addEvent(data: EventDoc): Promise<string> {
@@ -312,7 +442,7 @@ export async function addEvent(data: EventDoc): Promise<string> {
     if (!data.programme || !data.programme.trim()) {
       throw new Error('Event programme is required');
     }
-    const toWrite = sanitizeEventForWrite(data);
+    const toWrite = stripUndefined(sanitizeEventForWrite(data));
     const docRef = await addDoc(colRef, { ...toWrite });
     console.log('[eventsApi] created id', docRef.id);
     return docRef.id;
@@ -346,7 +476,7 @@ export async function updateEvent(
         throw new Error('Event programme cannot be empty');
       }
     }
-    const toWrite = sanitizeEventForWrite(data);
+    const toWrite = stripUndefined(sanitizeEventForWrite(data));
     await updateDoc(doc(colRef, id), { ...toWrite });
     console.log('[eventsApi] updated id', id);
   } catch (err) {

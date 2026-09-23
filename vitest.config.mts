@@ -9,7 +9,7 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
-    include: ['src/**/*.test.ts', 'scripts/**/*.test.mjs'],
+    include: ['tests/**/*.test.ts', 'tests/**/*.test.mjs'],
     // config.ts snapshots these at import time, so they must exist before any test
     // file pulls in a route. Values are dummies — Firebase and GeezSMS are mocked.
     env: {

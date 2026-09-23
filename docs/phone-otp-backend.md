@@ -158,6 +158,14 @@ body: token, phone, msg  [, shortcode_id]
   instead of silently following them to the health page (see the shortcode note).
 - **Phone format:** GeezSMS wants `2519…` (no leading `+`). `OTP_STRIP_PLUS=true`
   strips the `+` from the E.164 number before sending.
+- **Acceptance ≠ delivery.** `error === false` only means GeezSMS *queued* the message.
+  The dashboard's Sent/Failed status is assigned later, once the operator responds, and
+  there is no callback for it — so a send we logged as `otp_sent` (and answered `200`
+  for) can still show **Failed** on the dashboard. To correlate the two, `otp_sent`
+  logs `geezMessageId`, which is the dashboard's `ID` column, plus the redacted
+  `geezResponse` body. On failure, `sms_send_failed` logs the same body — that is where
+  the rejection reason (bad number, insufficient balance, …) appears. Bodies are
+  OTP-redacted before logging (`redactForLog`).
 - **Success** is `error === false` in the JSON body
   (`{"error":false,"msg":"SMS has been sent successfully.",...}`); anything else
   (invalid number, insufficient balance, …) → `502`. Transient/5xx/network → one retry,

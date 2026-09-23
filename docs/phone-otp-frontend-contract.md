@@ -194,11 +194,16 @@ final headers = {
 };
 
 // 1. request
+// "auth" on the LOGIN screen; "signup" on the CREATE-ACCOUNT screen. Sending "auth"
+// from signup is the old behavior: a number that already has an account gets an SMS
+// and is silently signed into it, with nothing shown to the user.
+final purpose = isSignupScreen ? 'signup' : 'auth';
 final r = await http.post(Uri.parse('$base/otp/request'),
     headers: headers,
-    body: jsonEncode({'phoneNumber': phone, 'purpose': 'auth', 'lang': lang}));
+    body: jsonEncode({'phoneNumber': phone, 'purpose': purpose, 'lang': lang}));
 if (r.statusCode != 200) {
   final code = jsonDecode(r.body)['error']['code'];   // switch → localized message
+  if (code == 'account_exists') return goToLogin(phone);  // 409, no SMS was sent
   return showError(code);
 }
 final requestId = jsonDecode(r.body)['requestId'];
@@ -208,7 +213,11 @@ final v = await http.post(Uri.parse('$base/otp/verify'),
     headers: headers,
     body: jsonEncode({'phoneNumber': phone, 'code': code, 'requestId': requestId}));
 if (v.statusCode != 200) {
-  return showError(jsonDecode(v.body)['error']['code']);
+  final code = jsonDecode(v.body)['error']['code'];
+  // Race: the account appeared between request and verify. The code is spent —
+  // send them to login rather than retrying it.
+  if (code == 'account_exists') return goToLogin(phone);
+  return showError(code);
 }
 final data = jsonDecode(v.body);
 await FirebaseAuth.instance.signInWithCustomToken(data['customToken']);
