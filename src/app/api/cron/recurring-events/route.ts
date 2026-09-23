@@ -1,6 +1,12 @@
 // app/api/cron/recurring-events/route.ts
 /**
- * Per-occurrence reminders for recurring events — docs/RECURRING_EVENTS_V4_PLAN.md §5.
+ * Day-of reminders for events — docs/RECURRING_EVENTS_V4_PLAN.md §5.
+ *
+ * Covers BOTH kinds, because they fail the member in opposite ways. A weekly
+ * service is habitual and barely needs reminding; a one-off conference
+ * announced three weeks ahead is exactly what gets forgotten, and its creation
+ * push was the only notice anyone got. So a one-off event is treated here as a
+ * series with a single occurrence.
  *
  * **This route must never write dates.** Under the V4 anchor model
  * `start_date_time` is occurrence 1 for the life of the series and every later
@@ -15,17 +21,18 @@
  * registered.
  *
  * The scheduler retries failed executions, so the route runs twice for the same
- * tick. `recurrence_reminded_ymd` is what stops a duplicate push, and it is
- * claimed inside a transaction so two concurrent ticks cannot both send.
+ * tick. `reminded_ymd` is what stops a duplicate push, and it is claimed inside
+ * a transaction so two concurrent ticks cannot both send.
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { Timestamp } from 'firebase-admin/firestore';
 
 import { adminDb, adminMessaging, FieldValue } from '@/lib/firebase/admin';
-import { ymdInAddis } from '@/lib/events/recurrence';
+import { atAddisTime, ymdInAddis } from '@/lib/events/recurrence';
 import type { Recurrence } from '@/lib/events/recurrence';
 import { addisClock } from '@/lib/events/recurrenceForm';
-import { occurrenceOn } from '@/lib/events/reminders';
+import { isDueOnTick, occurrenceOn } from '@/lib/events/reminders';
+import type { ReminderLead } from '@/lib/events/reminders';
 
 const PUSH_TOKENS_COLLECTION = 'push_tokens';
 
@@ -36,15 +43,22 @@ const MAX_TOKENS_PER_BATCH = 500;
 const MAX_EVENTS = 500;
 
 /**
- * How far ahead of an occurrence its reminder goes out. 0 sends on the morning
- * of; 1 would send the day before. The notification copy follows this value, so
- * changing it needs nothing else changed.
+ * Which pass this invocation is, taken from `?lead=`:
+ *
+ *   lead=1  registered for 14:00 Addis — important events, reminded the day before
+ *   lead=0  registered for 08:00 Addis — every other event, on the morning of
+ *
+ * Two registrations against one route rather than two routes: the selection
+ * rule (`isDueOnTick`) is what differs, and keeping it in one place is what
+ * stops an event being reminded by both.
  */
-const REMINDER_LEAD_DAYS = 0;
+function readLead(req: NextRequest): ReminderLead {
+  return req.nextUrl.searchParams.get('lead') === '1' ? 1 : 0;
+}
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-const LOG_PREFIX = '[recurring-events]';
+const LOG_PREFIX = '[event-reminders]';
 
 function log(message: string, meta?: Record<string, unknown>) {
   console.log(`${LOG_PREFIX} ${message}`, meta ? JSON.stringify(meta) : '');
@@ -75,18 +89,49 @@ export async function POST(req: NextRequest) {
   }
 
   const now = new Date();
+  const lead = readLead(req);
   // The day whose occurrences are being reminded about, on the church clock.
-  const targetYmd = ymdInAddis(new Date(now.getTime() + REMINDER_LEAD_DAYS * DAY_MS));
+  const targetYmd = ymdInAddis(new Date(now.getTime() + lead * DAY_MS));
 
-  log('tick', { now: now.toISOString(), targetYmd, leadDays: REMINDER_LEAD_DAYS });
+  log('tick', { now: now.toISOString(), targetYmd, lead });
 
-  let snap;
+  // The target day on the church clock. Addis is UTC+3 with no DST, so the day
+  // starts at 21:00 UTC the evening before — which is why this cannot be a
+  // plain UTC date boundary.
+  const dayStart = atAddisTime(new Date(now.getTime() + lead * DAY_MS), 0, 0);
+  const dayEnd = new Date(dayStart.getTime() + DAY_MS);
+
+  let candidates: FirebaseFirestore.QueryDocumentSnapshot[];
   try {
-    snap = await adminDb
-      .collection('events')
-      .where('recurrence_active', '==', true)
-      .limit(MAX_EVENTS)
-      .get();
+    // Two queries, because one cannot answer both halves. A recurring series is
+    // found by its flag and expanded by rule — its stored date is the anchor,
+    // usually nowhere near today. A one-off event is found by its date alone.
+    const [recurring, dated] = await Promise.all([
+      adminDb
+        .collection('events')
+        .where('recurrence_active', '==', true)
+        .limit(MAX_EVENTS)
+        .get(),
+      adminDb
+        .collection('events')
+        .where('start_date_time', '>=', Timestamp.fromDate(dayStart))
+        .where('start_date_time', '<', Timestamp.fromDate(dayEnd))
+        .limit(MAX_EVENTS)
+        .get(),
+    ]);
+
+    // A recurring anchor can also fall inside the target day; the flag query
+    // already owns it, so dedupe by id and let the recurring path handle it.
+    const byId = new Map<string, FirebaseFirestore.QueryDocumentSnapshot>();
+    for (const d of recurring.docs) byId.set(d.id, d);
+    for (const d of dated.docs) if (!byId.has(d.id)) byId.set(d.id, d);
+    candidates = [...byId.values()];
+
+    log('query complete', {
+      recurring: recurring.size,
+      datedOnTargetDay: dated.size,
+      matched: candidates.length,
+    });
   } catch (e) {
     logError('query failed', { error: errMessage(e) });
     return NextResponse.json(
@@ -95,13 +140,12 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  log('query complete', { matched: snap.size });
-
   let sent = 0;
   let skippedNotDue = 0;
   let skippedAlreadyReminded = 0;
   let skippedFinished = 0;
   let skippedUnusable = 0;
+  let skippedOtherTick = 0;
   const errors: { eventId: string; reason: string }[] = [];
 
   // Fetched once for the whole tick: an event reminder is a broadcast, the same
@@ -119,25 +163,37 @@ export async function POST(req: NextRequest) {
   }
   log('tokens loaded', { tokenCount: tokens.length });
 
-  for (const doc of snap.docs) {
+  for (const doc of candidates) {
     const data = doc.data();
     const rule = readRecurrence(data.recurrence);
     const anchorStart = toDate(data.start_date_time);
     const anchorEnd = toDate(data.end_date_time);
 
-    if (!rule || !anchorStart) {
-      // `recurrence_active` is set but the rule or anchor is unreadable — the
-      // app cannot expand this one either, so it is a data problem, not a tick.
+    if (!anchorStart) {
       skippedUnusable += 1;
-      logError('skipping event with no usable rule or anchor', {
-        eventId: doc.id,
-        hasRule: !!rule,
-        hasAnchor: !!anchorStart,
-      });
+      logError('skipping event with no usable start date', { eventId: doc.id });
+      continue;
+    }
+    if (data.recurrence_active === true && !rule) {
+      // Flagged as recurring but the rule is unreadable — the app cannot expand
+      // this one either, so it is a data problem rather than a quiet tick.
+      skippedUnusable += 1;
+      logError('skipping recurring event with no usable rule', { eventId: doc.id });
       continue;
     }
 
-    const hit = occurrenceOn(anchorStart, rule, targetYmd);
+    if (!isDueOnTick(data.is_important === true, lead)) {
+      skippedOtherTick += 1;
+      continue;
+    }
+
+    // A one-off event is its own single occurrence: the dated query already
+    // established that it falls on the target day.
+    const hit = rule
+      ? occurrenceOn(anchorStart, rule, targetYmd)
+      : ymdInAddis(anchorStart) === targetYmd
+        ? { index: 1, start: anchorStart }
+        : null;
     if (!hit) {
       skippedNotDue += 1;
       continue;
@@ -159,7 +215,7 @@ export async function POST(req: NextRequest) {
       continue;
     }
 
-    if (data.recurrence_reminded_ymd === targetYmd) {
+    if (data.reminded_ymd === targetYmd) {
       skippedAlreadyReminded += 1;
       continue;
     }
@@ -170,11 +226,11 @@ export async function POST(req: NextRequest) {
     try {
       claim = await adminDb.runTransaction(async (tx) => {
         const fresh = await tx.get(doc.ref);
-        const previous = fresh.get('recurrence_reminded_ymd') as
+        const previous = fresh.get('reminded_ymd') as
           | string
           | undefined;
         if (previous === targetYmd) return 'skip' as const;
-        tx.update(doc.ref, { recurrence_reminded_ymd: targetYmd });
+        tx.update(doc.ref, { reminded_ymd: targetYmd });
         return { previous: previous ?? null };
       });
     } catch (e) {
@@ -207,6 +263,7 @@ export async function POST(req: NextRequest) {
         start: hit.start,
         location: readLocation(data.location),
         tokens,
+        lead,
       });
     } catch (e) {
       logError('send threw', { eventId: doc.id, error: errMessage(e) });
@@ -233,12 +290,14 @@ export async function POST(req: NextRequest) {
 
   const summary = {
     targetYmd,
-    processed: snap.size,
+    lead,
+    processed: candidates.length,
     sent,
     skippedNotDue,
     skippedAlreadyReminded,
     skippedFinished,
     skippedUnusable,
+    skippedOtherTick,
     errorCount: errors.length,
     durationMs: Date.now() - startedAt,
   };
@@ -254,7 +313,7 @@ async function releaseClaim(
 ) {
   try {
     await ref.update({
-      recurrence_reminded_ymd: previous ?? FieldValue.delete(),
+      reminded_ymd: previous ?? FieldValue.delete(),
     });
   } catch (e) {
     logError('releasing claim failed', {
@@ -271,12 +330,14 @@ type ReminderInput = {
   start: Date;
   location: string;
   tokens: string[];
+  /** Decides whether the body reads "Today" or "Tomorrow". */
+  lead: ReminderLead;
 };
 
 /** Returns how many tokens accepted the push. */
 async function sendReminder(input: ReminderInput): Promise<number> {
   const title = input.title.trim() || 'Upcoming event';
-  const when = `${whenWord()} at ${addisClock(input.start)}`;
+  const when = `${whenWord(input.lead)} at ${addisClock(input.start)}`;
   const body = input.location ? `${when} · ${input.location}` : when;
 
   const message = {
@@ -323,10 +384,8 @@ async function sendReminder(input: ReminderInput): Promise<number> {
 }
 
 /** How the lead time reads in the notification body. */
-function whenWord(): string {
-  if (REMINDER_LEAD_DAYS === 0) return 'Today';
-  if (REMINDER_LEAD_DAYS === 1) return 'Tomorrow';
-  return `In ${REMINDER_LEAD_DAYS} days`;
+function whenWord(lead: ReminderLead): string {
+  return lead === 1 ? 'Tomorrow' : 'Today';
 }
 
 async function fetchAllTokens(): Promise<string[]> {

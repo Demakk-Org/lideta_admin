@@ -65,3 +65,25 @@ export function occurrenceOn(
   }
   return null;
 }
+
+/** Which tick is running: 1 = the day-before pass, 0 = the morning-of pass. */
+export type ReminderLead = 0 | 1;
+
+/**
+ * Whether a given tick is the one that should remind about this event.
+ *
+ *   important -> day before (14:00)
+ *   otherwise -> morning of (08:00)
+ *
+ * Importance decides the timing, not whether a reminder happens at all: every
+ * event gets exactly one. The split is social rather than technical — a
+ * day-before nudge reads as "make time for this", a morning-of one as "this is
+ * happening today".
+ *
+ * Exactly one tick matches any event, which is what stops the two schedules
+ * reminding the same occurrence twice. Whether the event recurs is irrelevant
+ * here: a one-off event is a series with a single occurrence.
+ */
+export function isDueOnTick(isImportant: boolean, lead: ReminderLead): boolean {
+  return isImportant ? lead === 1 : lead === 0;
+}

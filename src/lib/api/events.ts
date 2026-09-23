@@ -64,6 +64,15 @@ export type EventDoc = {
   recurrence_occurrence?: number;
   /** Written by the cron only, to keep a reminder from being sent twice. */
   recurrence_reminded_occurrence?: number;
+
+  /**
+   * Marks an event worth clearing a day for. Important events are reminded the
+   * day BEFORE, every other event on the morning of — so this decides the
+   * timing of the single reminder each event gets, not whether it gets one.
+   * The distinction is social rather than technical: a day-before nudge reads
+   * as "make time for this", a morning-of one as "this is on today".
+   */
+  is_important?: boolean;
 };
 
 export type WithId<T> = T & { id: string };
@@ -369,6 +378,9 @@ export function sanitizeEventForWrite(data: Partial<EventDoc>): Partial<EventDoc
   }
   if (result.description) {
     result.description = normalizeDescription(result.description) ?? undefined;
+  }
+  if (Object.prototype.hasOwnProperty.call(result, 'is_important')) {
+    (result as Record<string, unknown>).is_important = result.is_important === true;
   }
   if (Object.prototype.hasOwnProperty.call(result, 'recurrence')) {
     // `null` is the form's way of saying "this is no longer recurring". The

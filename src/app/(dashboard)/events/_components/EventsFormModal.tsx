@@ -76,6 +76,7 @@ export default function EventsFormModal({
   const [locationPrimary, setLocationPrimary] = useState("");
   const [locationSecondary, setLocationSecondary] = useState("");
   const [repeat, setRepeat] = useState<RecurrenceForm>(emptyRecurrenceForm);
+  const [isImportant, setIsImportant] = useState(false);
 
   function resetFields(from?: Partial<WithId<EventDoc>>) {
     setTitle(from?.title ?? "");
@@ -248,6 +249,7 @@ export default function EventsFormModal({
           primary: locationPrimary.trim(),
           ...(locationSecondary.trim() ? { secondary: locationSecondary.trim() } : {}),
         },
+        is_important: isImportant,
         short_description: shortDesc.trim(),
         tags,
         description: description ?? [],
@@ -358,6 +360,22 @@ export default function EventsFormModal({
             onChange={setRepeat}
             startWeekdayHint={start ? new Date(start).getDay() : undefined}
           />
+          <div className="sm:col-span-2 rounded-md border border-primary-200 p-3">
+            <label className="flex items-center gap-2 text-sm font-medium text-primary-800">
+              <input
+                type="checkbox"
+                checked={isImportant}
+                onChange={(e) => setIsImportant(e.target.checked)}
+                className="h-4 w-4 rounded border-primary-300 accent-primary-600"
+              />
+              Important — remind members the day before
+            </label>
+            <p className="mt-1 text-xs text-primary-600">
+              {isImportant
+                ? "Members are reminded at 2:00 PM the day before, so they can plan around it."
+                : "Members are reminded at 8:00 AM on the day itself."}
+            </p>
+          </div>
           <div>
             <label className="block text-sm font-medium text-primary-800">Location (Primary)</label>
             <input
