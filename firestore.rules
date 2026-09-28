@@ -35,7 +35,7 @@ service cloud.firestore {
     match /course_progress/{docId}         { allow read, write, update: if request.auth != null; }
     match /quiz_categories/{docId}         { allow read: if request.auth != null; }
     match /quiz_attempts/{docId}           { allow read, write: if request.auth != null; }
-    match /audios/{docId}                  { allow read: if request.auth != null; }
+    match /audios/{docId}                  { allow read, write: if request.auth != null; }
     match /worship_documents/{docId}       { allow read: if request.auth != null; }
     match /worship_groups/{docId}          { allow read: if request.auth != null; }
     match /bible_studies/{docId}           { allow read, write, update: if request.auth != null; }
