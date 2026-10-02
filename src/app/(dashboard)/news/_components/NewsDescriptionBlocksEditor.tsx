@@ -22,17 +22,7 @@ export default function NewsDescriptionBlocksEditor({
   const [uploadingIndex, setUploadingIndex] = useState<number | null>(null);
   return (
     <div className="sm:col-span-2">
-      <div className="flex items-center justify-between">
-        <label className="block text-sm font-medium text-primary-800">Content Blocks</label>
-        <AppButton
-          type="button"
-          variant={AppButtonVariant.Add}
-          className="px-3 py-1 text-xs"
-          onClick={() => onChange([...items, { type: NewsContentType.Paragraph, value: "" }])}
-        >
-          Add Block
-        </AppButton>
-      </div>
+      <label className="block text-sm font-medium text-primary-800">Content Blocks</label>
       <DraggableList
         items={items}
         onReorder={(next) => onChange(next)}
@@ -179,6 +169,16 @@ export default function NewsDescriptionBlocksEditor({
           </div>
         )}
       />
+      {/* Below the list, not above it: a new block is appended to the end, so
+          the control sits where the block it creates will appear. */}
+      <AppButton
+        type="button"
+        variant={AppButtonVariant.Add}
+        className="mt-3 px-3 py-1 text-xs"
+        onClick={() => onChange([...items, { type: NewsContentType.Paragraph, value: "" }])}
+      >
+        Add Block
+      </AppButton>
     </div>
   );
 }
