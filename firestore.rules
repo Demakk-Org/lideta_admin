@@ -19,34 +19,35 @@ service cloud.firestore {
 
     // App-global content: read for any signed-in user,
     // writes go through admin console / cloud functions.
-    match /daily_verse/{docId}             { allow read, write: if request.auth != null; }
-    match /news/{docId}                    { allow read, write: if request.auth != null; }
-    match /videos/{docId}                  { allow read, write: if request.auth != null; }
-    match /events/{docId}                  { allow read, write, update: if request.auth != null; }
-    match /event_categories/{docId}        { allow read: if request.auth != null; }
+    match /daily_verse/{docId}             { allow read: if request.auth != null; allow write: if isAdmin(); }
+    match /news/{docId}                    { allow read: if request.auth != null; allow write: if isAdmin(); }
+    match /videos/{docId}                  { allow read: if request.auth != null; allow write: if isAdmin(); }
+    match /events/{docId}                  { allow read: if request.auth != null; allow write: if isAdmin(); }
+    match /event_categories/{docId}        { allow read: if request.auth != null; allow write: if isAdmin(); }
     match /notifications/{docId}           { allow read: if request.auth != null; }
-    match /bible/{docId}                   { allow read, write, update: if request.auth != null; }
-    match /bible_sources/{docId}           { allow read: if request.auth != null; }
-    match /books/{docId}                   { allow read: if request.auth != null; }
-    match /quizzes/{docId}                 { allow read, write, update: if request.auth != null; }
+    match /bible/{docId}                   { allow read: if request.auth != null; allow write: if isAdmin(); }
+    match /bible_sources/{docId}           { allow read: if request.auth != null; allow write: if isAdmin(); }
+    match /books/{docId}                   { allow read: if request.auth != null; allow write: if isAdmin(); }
+    match /quizzes/{docId}                 { allow read: if request.auth != null; allow write: if isAdmin(); }
     match /courses/{docId}                 { allow read, write, update: if request.auth != null; }
     match /courses/{courseId}/lessons/{docId}                 { allow read, write, update: if request.auth != null; }
-    match /course_categories/{docId}       { allow read, write, update: if request.auth != null; }
+    match /course_categories/{docId}       { allow read: if request.auth != null; allow write: if isAdmin(); }
     match /course_progress/{docId}         { allow read, write, update: if request.auth != null; }
-    match /quiz_categories/{docId}         { allow read: if request.auth != null; }
+    match /quiz_categories/{docId}         { allow read: if request.auth != null; allow write: if isAdmin(); }
     match /quiz_attempts/{docId}           { allow read, write: if request.auth != null; }
-    match /audios/{docId}                  { allow read, write: if request.auth != null; }
-    match /worship_documents/{docId}       { allow read: if request.auth != null; }
-    match /worship_groups/{docId}          { allow read: if request.auth != null; }
+    match /audios/{docId}                  { allow read: if request.auth != null; allow write: if isAdmin(); }
+    match /worship_documents/{docId}       { allow read: if request.auth != null; allow write: if isAdmin(); }
+    match /worship_groups/{docId}          { allow read: if request.auth != null; allow write: if isAdmin(); }
     match /bible_studies/{docId}           { allow read, write, update: if request.auth != null; }
-    match /bible_study_groups/{docId}      { allow read: if request.auth != null; }
-    match /bible_study_categories/{docId}  { allow read, write, update: if request.auth != null; }
-    match /quiz_categories/{docId}         { allow read, write: if request.auth != null; }
+    match /bible_study_groups/{docId}      { allow read, update: if request.auth != null; allow create: if isAdmin();}
+    match /bible_study_categories/{docId}  { allow read: if request.auth != null; allow write: if isAdmin(); }
+    match /quiz_categories/{docId}         { allow read: if request.auth != null; allow write: if isAdmin(); }
     match /bible_study_groups/{groupId}/{document=**} {
       allow read, write: if request.auth != null;
     }
     match /quizzes/{quizId}/{document=**} {
-      allow read, write, update: if request.auth != null;
+      allow read: if request.auth != null;
+      allow write: if isAdmin();
     }
 
     // A member reads and writes only their own block list. Private to them —
