@@ -21,6 +21,8 @@ export default function BiblesModal({ isOpen, form, setForm, submitting, submitL
   const langs = useMemo(() => [
     { code: "am", label: "Amharic" },
     { code: "en", label: "English" },
+    { code: "om", label: "Afaan Oromo" },
+    { code: "ti", label: "Tigrinya" },
   ], []);
 
   if (!isOpen) return null;
