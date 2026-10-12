@@ -157,6 +157,14 @@ export const FEATURES = [
     group: 'media',
     dependsOn: [],
   },
+  {
+    key: 'courses',
+    label: 'Courses & lessons',
+    labelAm: 'ኮርሶች እና ትምህርቶች',
+    description: 'Courses list, course detail and its lessons.',
+    group: 'media',
+    dependsOn: [],
+  },
 
   // Engagement
   {

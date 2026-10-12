@@ -11,6 +11,17 @@ import { uploadNewsImage } from "@/lib/api/storage";
 import NewsDescriptionBlocksEditor, { type FormContentItem } from "./NewsDescriptionBlocksEditor";
 import FileUploadButton from "@/components/ui/FileUploadButton";
 
+/** ISO string → `datetime-local` value, in the admin's local time. */
+function toInputDT(v?: string): string {
+  if (!v) return "";
+  const d = new Date(v);
+  if (isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(
+    d.getHours(),
+  )}:${pad(d.getMinutes())}`;
+}
+
 export default function NewsFormModal({
   open,
   mode,
@@ -33,6 +44,7 @@ export default function NewsFormModal({
   const [shortDesc, setShortDesc] = useState("");
   const [tagsText, setTagsText] = useState("");
   const [statusVal, setStatusVal] = useState<"draft" | "published">("draft");
+  const [createdAtInput, setCreatedAtInput] = useState("");
   const [contentItems, setContentItems] = useState<FormContentItem[]>([]);
   const [authorId, setAuthorId] = useState("");
   const [authorQuery, setAuthorQuery] = useState("");
@@ -46,6 +58,7 @@ export default function NewsFormModal({
     setShortDesc(initial?.short_description ?? "");
     setTagsText(Array.isArray(initial?.tags) ? (initial?.tags as string[]).join(", ") : "");
     setStatusVal((initial?.status as "draft" | "published" | undefined) ?? "draft");
+    setCreatedAtInput(toInputDT(initial?.createdAt));
     setAuthorId(initial?.author_id ?? "");
     setAuthorQuery("");
     const mapped: FormContentItem[] = (initial?.content ?? []).map((d) => {
@@ -118,6 +131,17 @@ export default function NewsFormModal({
         content,
         author_id: authorId.trim(),
       };
+      // Only a draft's date is editable; the API ignores it otherwise. Sent
+      // only when changed, so an untouched date keeps its seconds.
+      if (
+        statusVal === "draft" &&
+        createdAtInput &&
+        createdAtInput !== toInputDT(initial?.createdAt)
+      ) {
+        const d = new Date(createdAtInput);
+        if (isNaN(d.getTime())) throw new Error("Invalid date");
+        payload.createdAt = d.toISOString();
+      }
 
       await onSubmit(payload);
     } catch (err) {
@@ -233,7 +257,19 @@ export default function NewsFormModal({
           </div>
           <div>
             <label className="block text-sm font-medium text-primary-800">Created At</label>
-            {mode === "edit" && initial?.createdAt ? (
+            {statusVal === "draft" ? (
+              <>
+                <input
+                  type="datetime-local"
+                  value={createdAtInput}
+                  onChange={(e) => setCreatedAtInput(e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-primary-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+                {!createdAtInput && (
+                  <p className="mt-1 text-xs text-primary-600">Leave empty to use the time it is created</p>
+                )}
+              </>
+            ) : mode === "edit" && initial?.createdAt ? (
               <input
                 type="text"
                 readOnly

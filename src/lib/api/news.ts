@@ -75,6 +75,13 @@ function normalizeTimestamp(val: unknown): string | undefined {
   return undefined;
 }
 
+/** ISO string → Firestore Timestamp; the app orders and reads news by it. */
+function toTimestamp(iso: string | undefined): Timestamp | undefined {
+  if (!iso) return undefined;
+  const d = new Date(iso);
+  return isNaN(d.getTime()) ? undefined : Timestamp.fromDate(d);
+}
+
 function toArrayOfStrings(input: unknown): string[] {
   if (Array.isArray(input)) return input.map((v) => String(v));
   if (typeof input === 'string')
@@ -212,9 +219,11 @@ export async function addNews(data: NewsDoc): Promise<string> {
     if (!data.author_id || !data.author_id.trim())
       throw new Error('Author is required');
     const toWrite = sanitizeForWrite(data);
+    // A draft may be back- or forward-dated; anything else is stamped now.
+    const chosen = data.status === 'draft' ? toTimestamp(data.createdAt) : undefined;
     const docRef = await addDoc(colRef, {
       ...toWrite,
-      createdAt: Timestamp.now(),
+      createdAt: chosen ?? Timestamp.now(),
     });
     console.log('[newsApi] created id', docRef.id);
     return docRef.id;
@@ -242,12 +251,13 @@ export async function updateNews(
       const val = (data.author_id ?? '').toString();
       if (!val.trim()) throw new Error('Author is required');
     }
-    const toWrite = sanitizeForWrite(data);
-    // Never allow updating createdAt via edit
-    if (Object.prototype.hasOwnProperty.call(toWrite, 'createdAt')) {
-      delete (toWrite as Record<string, unknown>).createdAt;
-    }
-    await updateDoc(doc(colRef, id), { ...toWrite });
+    const toWrite: Record<string, unknown> = { ...sanitizeForWrite(data) };
+    // The date can only be changed while the news is a draft; once published
+    // it stays as it was.
+    const chosen = data.status === 'draft' ? toTimestamp(data.createdAt) : undefined;
+    if (chosen) toWrite.createdAt = chosen;
+    else delete toWrite.createdAt;
+    await updateDoc(doc(colRef, id), toWrite);
   } catch (err) {
     console.error('[newsApi] updateNews error', err);
     throw new Error('Failed to update news');
