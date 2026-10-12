@@ -220,7 +220,8 @@ export async function addNews(data: NewsDoc): Promise<string> {
       throw new Error('Author is required');
     const toWrite = sanitizeForWrite(data);
     // A draft may be back- or forward-dated; anything else is stamped now.
-    const chosen = data.status === 'draft' ? toTimestamp(data.createdAt) : undefined;
+    const chosen =
+      data.status === 'draft' ? toTimestamp(data.createdAt) : undefined;
     const docRef = await addDoc(colRef, {
       ...toWrite,
       createdAt: chosen ?? Timestamp.now(),
@@ -252,11 +253,20 @@ export async function updateNews(
       if (!val.trim()) throw new Error('Author is required');
     }
     const toWrite: Record<string, unknown> = { ...sanitizeForWrite(data) };
-    // The date can only be changed while the news is a draft; once published
-    // it stays as it was.
-    const chosen = data.status === 'draft' ? toTimestamp(data.createdAt) : undefined;
-    if (chosen) toWrite.createdAt = chosen;
-    else delete toWrite.createdAt;
+    // The date can be changed while the news is a draft. When publishing
+    // with a specified createdAt, preserve it so backdated items keep their date.
+    if (data.status === 'draft') {
+      const chosen = toTimestamp(data.createdAt);
+      if (chosen) toWrite.createdAt = chosen;
+      else delete toWrite.createdAt;
+    } else if (data.createdAt) {
+      // When publishing with a specified createdAt, preserve it
+      const chosen = toTimestamp(data.createdAt);
+      if (chosen) toWrite.createdAt = chosen;
+    } else {
+      // Otherwise, don't touch createdAt (keep the existing value)
+      delete toWrite.createdAt;
+    }
     await updateDoc(doc(colRef, id), toWrite);
   } catch (err) {
     console.error('[newsApi] updateNews error', err);
