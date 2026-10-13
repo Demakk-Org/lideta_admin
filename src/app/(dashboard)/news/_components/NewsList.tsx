@@ -236,6 +236,7 @@ export default function NewsList({
                     variant={AppButtonVariant.Add}
                     className='px-3 py-1 text-xs'
                     onClick={() => onPublish(it)}
+                    title='Publishing sends a push notification to all users'
                   >
                     Publish
                   </AppButton>
@@ -259,9 +260,16 @@ export default function NewsList({
                     onClick={() => onNotify(it)}
                     disabled={notifying}
                     className='px-3 py-1 text-xs'
+                    label='Send again'
+                    title='Send another push notification'
                   />
                 )}
               </div>
+              {it.status === 'published' && it.notifiedAt && (
+                <p className='mt-2 text-right text-[11px] text-primary-500'>
+                  Notified {new Date(it.notifiedAt).toLocaleString()}
+                </p>
+              )}
             </div>
           ))}
         </div>

@@ -14,10 +14,12 @@ import {
   removeNews,
 } from '@/lib/redux/features/newsSlice';
 import { fetchUsers } from '@/lib/redux/features/usersSlice';
+import { FUTURE_PUBLISH_ERROR } from '@/lib/api/news';
 import type { WithId, NewsDoc } from '@/lib/api/news';
 import NewsList from './_components/NewsList';
 import NewsFormModal from './_components/NewsFormModal';
 import ConfirmDeleteModal from '@/components/ui/ConfirmDeleteModal';
+import AppModal from '@/components/ui/AppModal';
 import { useContentNotification } from '@/lib/notifications/useContentNotification';
 
 export default function NewsClient() {
@@ -33,6 +35,13 @@ export default function NewsClient() {
 
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  // Publishing and re-notifying both push to every user, so confirm first.
+  const [publishItem, setPublishItem] = useState<WithId<NewsDoc> | null>(
+    null,
+  );
+  const [publishing, setPublishing] = useState(false);
+  const [notifyItem, setNotifyItem] = useState<WithId<NewsDoc> | null>(null);
 
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isBatchDeleteOpen, setIsBatchDeleteOpen] = useState(false);
@@ -89,18 +98,40 @@ export default function NewsClient() {
     setIsModalOpen(false);
   };
 
-  const handlePublish = async (it: WithId<NewsDoc>) => {
+  const openPublish = (it: WithId<NewsDoc>) => {
+    if (it.createdAt && new Date(it.createdAt).getTime() > Date.now()) {
+      toast.error(FUTURE_PUBLISH_ERROR);
+      return;
+    }
+    setPublishItem(it);
+  };
+
+  // news.ts stamps createdAt with the publish time, or rejects a future date.
+  const confirmPublish = async () => {
+    if (!publishItem) return;
+    setPublishing(true);
     try {
       await dispatch(
-        editNews({
-          id: it.id,
-          data: { status: 'published', createdAt: it.createdAt },
-        }),
+        editNews({ id: publishItem.id, data: { status: 'published' } }),
       ).unwrap();
       toast.success('News published');
-    } catch {
-      toast.error('Publish failed');
+    } catch (err) {
+      toast.error((err as { message?: string })?.message || 'Publish failed');
+    } finally {
+      setPublishing(false);
+      setPublishItem(null);
     }
+  };
+
+  const confirmNotify = () => {
+    if (!notifyItem) return;
+    notify({
+      type: 'news',
+      id: notifyItem.id,
+      title: notifyItem.title,
+      imageUrl: notifyItem.imageUrl,
+    });
+    setNotifyItem(null);
   };
 
   const onDelete = (id: string) => {
@@ -198,15 +229,8 @@ export default function NewsClient() {
           notifying={notifying}
           onEdit={openEdit}
           onDelete={onDelete}
-          onPublish={handlePublish}
-          onNotify={(it) =>
-            notify({
-              type: 'news',
-              id: it.id,
-              title: it.title,
-              imageUrl: it.imageUrl,
-            })
-          }
+          onPublish={openPublish}
+          onNotify={setNotifyItem}
           selectedIds={selectedIds}
           onToggleSelect={toggleSelect}
         />
@@ -220,6 +244,55 @@ export default function NewsClient() {
         onSubmit={handleSubmit}
         users={users}
       />
+
+      {/* Publish Modal */}
+      <AppModal
+        open={!!publishItem}
+        type='edit'
+        title='Publish news?'
+        onClose={() => !publishing && setPublishItem(null)}
+        footer={
+          <AppButton
+            variant={AppButtonVariant.Add}
+            onClick={confirmPublish}
+            disabled={publishing}
+          >
+            {publishing ? 'Publishing...' : 'Publish'}
+          </AppButton>
+        }
+      >
+        <p className='text-sm text-primary-800'>
+          Publishing sends a push notification to all users. The news will be
+          dated now.
+        </p>
+      </AppModal>
+
+      {/* Send-again Modal */}
+      <AppModal
+        open={!!notifyItem}
+        type='edit'
+        title='Send notification again?'
+        onClose={() => setNotifyItem(null)}
+        footer={
+          <AppButton
+            variant={AppButtonVariant.Add}
+            onClick={confirmNotify}
+            disabled={notifying}
+          >
+            Send again
+          </AppButton>
+        }
+      >
+        <p className='text-sm text-primary-800'>
+          Users were already notified when this was published. Send another
+          notification?
+        </p>
+        {notifyItem?.notifiedAt && (
+          <p className='mt-2 text-xs text-primary-600'>
+            Last sent {new Date(notifyItem.notifiedAt).toLocaleString()}
+          </p>
+        )}
+      </AppModal>
 
       {/* Delete Modal */}
       <ConfirmDeleteModal

@@ -7,6 +7,7 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDoc,
   getDocs,
   query,
   updateDoc,
@@ -44,6 +45,7 @@ export type NewsDoc = {
   short_description?: string;
   content?: NewsContentItem[]; // content blocks similar to events.description
   author_id?: string;
+  notifiedAt?: string; // set by the publish cloud function; ISO when reading
 };
 
 export type WithId<T> = T & { id: string };
@@ -80,6 +82,35 @@ function toTimestamp(iso: string | undefined): Timestamp | undefined {
   if (!iso) return undefined;
   const d = new Date(iso);
   return isNaN(d.getTime()) ? undefined : Timestamp.fromDate(d);
+}
+
+export const FUTURE_PUBLISH_ERROR =
+  'This news is dated in the future. Change the date or wait until then to publish.';
+
+/**
+ * createdAt to write, or undefined to leave the stored value alone.
+ * createdAt is the "went live" date the app filters on, so publishing stamps
+ * it now (the push goes out then too) and it is frozen once published. A
+ * draft may carry any date, but publishing one dated in the future is
+ * refused since nothing would publish it later.
+ */
+export function resolveCreatedAt(
+  prev: { status?: NewsStatus; createdAt?: Timestamp },
+  data: Partial<NewsDoc>,
+  now: Timestamp = Timestamp.now(),
+): Timestamp | undefined {
+  if (prev.status === 'published') return undefined;
+  const picked = toTimestamp(data.createdAt);
+  if (data.status !== 'published') return picked;
+  const dated = picked ?? prev.createdAt;
+  if (dated && dated.toMillis() > now.toMillis())
+    throw new Error(FUTURE_PUBLISH_ERROR);
+  return now;
+}
+
+/** Errors whose message is meant for the admin, not swallowed by the API. */
+function rethrowIfUserFacing(err: unknown) {
+  if (err instanceof Error && err.message === FUTURE_PUBLISH_ERROR) throw err;
 }
 
 function toArrayOfStrings(input: unknown): string[] {
@@ -169,6 +200,7 @@ function normalizeContent(raw: unknown): NewsContentItem[] | undefined {
 
 function sanitizeForWrite(data: Partial<NewsDoc>): Partial<NewsDoc> {
   const result: Partial<NewsDoc> = { ...data };
+  delete result.notifiedAt; // owned by the cloud function
   if (result.content) {
     result.content = normalizeContent(result.content) ?? undefined;
   }
@@ -194,10 +226,12 @@ export async function listNews(): Promise<WithId<NewsDoc>[]> {
     const items = snap.docs.map((d) => {
       const data = d.data() as Record<string, unknown>;
       const createdAt = normalizeTimestamp(data['createdAt']);
+      const notifiedAt = normalizeTimestamp(data['notifiedAt']);
       const content = normalizeContent(data['content']);
       const normalized: NewsDoc = {
         ...(data as unknown as NewsDoc),
         createdAt,
+        notifiedAt,
         content,
       };
       return { id: d.id, ...normalized } as WithId<NewsDoc>;
@@ -219,17 +253,15 @@ export async function addNews(data: NewsDoc): Promise<string> {
     if (!data.author_id || !data.author_id.trim())
       throw new Error('Author is required');
     const toWrite = sanitizeForWrite(data);
-    // A draft may be back- or forward-dated; anything else is stamped now.
-    const chosen =
-      data.status === 'draft' ? toTimestamp(data.createdAt) : undefined;
     const docRef = await addDoc(colRef, {
       ...toWrite,
-      createdAt: chosen ?? Timestamp.now(),
+      createdAt: resolveCreatedAt({}, data) ?? Timestamp.now(),
     });
     console.log('[newsApi] created id', docRef.id);
     return docRef.id;
   } catch (err) {
     console.error('[newsApi] addNews error', err);
+    rethrowIfUserFacing(err);
     throw new Error('Failed to add news');
   }
 }
@@ -253,23 +285,24 @@ export async function updateNews(
       if (!val.trim()) throw new Error('Author is required');
     }
     const toWrite: Record<string, unknown> = { ...sanitizeForWrite(data) };
-    // The date can be changed while the news is a draft. When publishing
-    // with a specified createdAt, preserve it so backdated items keep their date.
-    if (data.status === 'draft') {
-      const chosen = toTimestamp(data.createdAt);
-      if (chosen) toWrite.createdAt = chosen;
-      else delete toWrite.createdAt;
-    } else if (data.createdAt) {
-      // When publishing with a specified createdAt, preserve it
-      const chosen = toTimestamp(data.createdAt);
-      if (chosen) toWrite.createdAt = chosen;
-    } else {
-      // Otherwise, don't touch createdAt (keep the existing value)
-      delete toWrite.createdAt;
-    }
-    await updateDoc(doc(colRef, id), toWrite);
+    // Read the stored doc: whether this is a publish, and whether createdAt
+    // is already frozen, depends on its current status.
+    const ref = doc(colRef, id);
+    const prev = (await getDoc(ref)).data() ?? {};
+    const createdAt = resolveCreatedAt(
+      {
+        status: prev.status as NewsStatus | undefined,
+        createdAt:
+          prev.createdAt instanceof Timestamp ? prev.createdAt : undefined,
+      },
+      data,
+    );
+    if (createdAt) toWrite.createdAt = createdAt;
+    else delete toWrite.createdAt;
+    await updateDoc(ref, toWrite);
   } catch (err) {
     console.error('[newsApi] updateNews error', err);
+    rethrowIfUserFacing(err);
     throw new Error('Failed to update news');
   }
 }

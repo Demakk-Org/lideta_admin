@@ -55,6 +55,7 @@ export default function NewsFormModal({
   const [contentItems, setContentItems] = useState<FormContentItem[]>([]);
   const [authorId, setAuthorId] = useState('');
   const [authorQuery, setAuthorQuery] = useState('');
+  const isPublished = initial?.status === 'published';
 
   useEffect(() => {
     if (!open) return;
@@ -166,13 +167,16 @@ export default function NewsFormModal({
         imageUrl: imageUrl.trim() || undefined,
         short_description: shortDesc.trim() || undefined,
         tags: tags.length ? tags : undefined,
-        status: 'draft',
+        // Publishing happens from the card; editing keeps the current status.
+        status: initial?.status ?? 'draft',
         content,
         author_id: authorId.trim(),
       };
-      // Send createdAt when date was changed (editable for drafts)
+      // Send createdAt when date was changed (editable for drafts only)
       const dateChanged =
-        createdAtInput && createdAtInput !== toInputDT(initial?.createdAt);
+        !isPublished &&
+        createdAtInput &&
+        createdAtInput !== toInputDT(initial?.createdAt);
       if (dateChanged) {
         const d = new Date(createdAtInput);
         if (isNaN(d.getTime())) throw new Error('Invalid date');
@@ -309,13 +313,14 @@ export default function NewsFormModal({
                   type='datetime-local'
                   value={createdAtInput}
                   onChange={(e) => setCreatedAtInput(e.target.value)}
-                  className='mt-1 block w-full rounded-md border border-primary-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500'
+                  disabled={isPublished}
+                  className='mt-1 block w-full rounded-md border border-primary-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:cursor-not-allowed disabled:bg-primary-50'
                 />
-                {!createdAtInput && (
-                  <p className='mt-1 text-xs text-primary-600'>
-                    Leave empty to use the time it is created
-                  </p>
-                )}
+                <p className='mt-1 text-xs text-primary-600'>
+                  {isPublished
+                    ? 'Set when it was published; it cannot be changed.'
+                    : 'Drafts can be dated; publishing uses the current time if this date has passed.'}
+                </p>
               </>
             </div>
             <div className='sm:col-span-2'>
