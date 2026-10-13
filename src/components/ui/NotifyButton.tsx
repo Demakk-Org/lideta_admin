@@ -7,6 +7,8 @@ type Props = {
   disabled?: boolean;
   className?: string;
   title?: string;
+  /** Optional text next to the bell. */
+  label?: string;
 };
 
 /** Bell button that broadcasts a "new content" notification to all users. */
@@ -15,6 +17,7 @@ export default function NotifyButton({
   disabled,
   className = '',
   title = 'Send notification',
+  label,
 }: Props) {
   return (
     <button
@@ -26,6 +29,7 @@ export default function NotifyButton({
       aria-label={title}
     >
       <BellIcon className='h-4 w-4' />
+      {label && <span className='ml-1'>{label}</span>}
     </button>
   );
 }
