@@ -16,6 +16,7 @@ import { BASE_CONTENT_LOCALE, CONTENT_LOCALE_LABELS } from '@/lib/i18n/contentLo
 import type { ContentLocale } from '@/lib/i18n/contentLocales';
 import {
   buildLocalized,
+  coerceDefaultLanguage,
   displayText,
   localesOf,
   lowerCaseOf,
@@ -153,21 +154,6 @@ function coerceStatus(val: unknown): PublishStatus {
 function coercePrerequisites(val: unknown): string[] {
   if (!Array.isArray(val)) return [];
   return val.filter((v): v is string => typeof v === 'string' && v.trim() !== '');
-}
-
-function coerceDefaultLanguage(
-  val: unknown,
-  title: LocalizedText,
-): ContentLocale {
-  const present = localesOf(title);
-  if (typeof val === 'string' && present.includes(val as ContentLocale)) {
-    return val as ContentLocale;
-  }
-  // Must be a language the course actually has, or the fallback chain starts
-  // on a language with no text.
-  return present.includes(BASE_CONTENT_LOCALE)
-    ? BASE_CONTENT_LOCALE
-    : (present[0] ?? BASE_CONTENT_LOCALE);
 }
 
 function mapDoc(id: string, data: Record<string, unknown>): WithId<CourseDoc> {

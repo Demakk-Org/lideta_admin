@@ -306,3 +306,16 @@ export async function uploadBibleJson(
     throw new Error('Failed to upload bible JSON');
   }
 }
+
+/** The logo on the app's About page. Old logos are left in place; the draft may still point at one. */
+export async function uploadAboutPageLogo(file: File): Promise<string> {
+  try {
+    const path = `about_page/logo/${Date.now()}-${file.name}`;
+    const metadata = { contentType: file.type || 'application/octet-stream' };
+    const snap = await uploadBytes(ref(storage, path), file, metadata);
+    return await getDownloadURL(snap.ref);
+  } catch (err) {
+    console.error('[storageApi] uploadAboutPageLogo error', err);
+    throw new Error('Failed to upload the logo');
+  }
+}

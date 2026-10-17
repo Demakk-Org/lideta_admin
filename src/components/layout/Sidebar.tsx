@@ -81,6 +81,11 @@ const navigation = [
     href: '/app-features',
     icon: AdjustmentsHorizontalIcon,
   },
+  {
+    name: 'About Page',
+    href: '/about-page',
+    icon: DocumentTextIcon,
+  },
 ];
 
 export default function Sidebar() {
