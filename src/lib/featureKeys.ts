@@ -209,6 +209,14 @@ export const FEATURES = [
     group: 'app',
     dependsOn: [],
   },
+  {
+    key: 'aboutPage',
+    label: 'About page',
+    labelAm: 'ስለ እኛ',
+    description: 'About the church screen, from the published About page.',
+    group: 'app',
+    dependsOn: [],
+  },
 ] as const satisfies readonly FeatureDefinition[];
 
 export type FeatureKey = (typeof FEATURES)[number]['key'];
