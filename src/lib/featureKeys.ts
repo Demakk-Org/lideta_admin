@@ -157,6 +157,14 @@ export const FEATURES = [
     group: 'media',
     dependsOn: [],
   },
+  {
+    key: 'courses',
+    label: 'Courses & lessons',
+    labelAm: 'ኮርሶች እና ትምህርቶች',
+    description: 'Courses list, course detail and its lessons.',
+    group: 'media',
+    dependsOn: [],
+  },
 
   // Engagement
   {
@@ -198,6 +206,14 @@ export const FEATURES = [
     label: 'Tutorial',
     labelAm: 'መማሪያ',
     description: 'First-run tutorial tour.',
+    group: 'app',
+    dependsOn: [],
+  },
+  {
+    key: 'aboutPage',
+    label: 'About page',
+    labelAm: 'ስለ እኛ',
+    description: 'About the church screen, from the published About page.',
     group: 'app',
     dependsOn: [],
   },

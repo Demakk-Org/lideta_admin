@@ -156,3 +156,22 @@ export function displayText(
 ): string {
   return resolveLocalized(value, { selected: defaultLanguage }).value;
 }
+
+/**
+ * A document's primary language, which must be one it has text in: the
+ * fallback chain starts there, so a primary with no text renders blank.
+ * `languagesOf` is the field that decides which languages exist (a course's
+ * `title`, the About page's `churchName`).
+ */
+export function coerceDefaultLanguage(
+  val: unknown,
+  languagesOf: LocalizedText,
+): ContentLocale {
+  const present = localesOf(languagesOf);
+  if (typeof val === 'string' && present.includes(val as ContentLocale)) {
+    return val as ContentLocale;
+  }
+  return present.includes(BASE_CONTENT_LOCALE)
+    ? BASE_CONTENT_LOCALE
+    : (present[0] ?? BASE_CONTENT_LOCALE);
+}

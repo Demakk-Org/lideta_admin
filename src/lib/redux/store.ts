@@ -22,6 +22,7 @@ import coursesReducer from './features/coursesSlice';
 import lessonsReducer from './features/lessonsSlice';
 import courseCategoriesReducer from './features/courseCategoriesSlice';
 import appSettingsReducer from './features/appSettingsSlice';
+import aboutPageReducer from './features/aboutPageSlice';
 
 // Import your reducers here
 // import someReducer from './features/someFeature/someSlice';
@@ -60,6 +61,7 @@ export const store = configureStore({
     deletionRequests: deletionRequestsReducer,
     reports: reportsReducer,
     appSettings: appSettingsReducer,
+    aboutPage: aboutPageReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({

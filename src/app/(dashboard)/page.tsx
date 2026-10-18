@@ -145,6 +145,17 @@ const featureGroups: FeatureGroup[] = [
     ],
   },
   {
+    title: 'Church',
+    features: [
+      {
+        name: 'About Page',
+        href: '/about-page',
+        description: 'Edit the About the church page shown in the app.',
+        icon: DocumentTextIcon,
+      },
+    ],
+  },
+  {
     title: 'People',
     features: [
       {

@@ -10,7 +10,7 @@ import {
 } from 'firebase/firestore';
 
 export type BibleSource = {
-  lang: string; // e.g., 'am', 'en'
+  lang: string; // 'am' | 'en' | 'om' | 'ti'
   name: string;
   short_name: string;
   source_url: string; // Firebase Storage URL or external URL

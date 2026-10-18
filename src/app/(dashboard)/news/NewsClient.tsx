@@ -1,33 +1,47 @@
-"use client";
+'use client';
 
-import { useEffect, useMemo, useState } from "react";
-import toast from "react-hot-toast";
-import { useAppDispatch, useAppSelector } from "@/lib/redux/store";
-import AppButton, { AppButtonVariant } from "@/components/ui/AppButton";
-import Pagination from "@/components/ui/Pagination";
-import PagedGridPage from "@/components/ui/PagedGridPage";
-import { usePagedItems } from "@/lib/hooks/usePagedItems";
-import { fetchNews, createNews, editNews, removeNews } from "@/lib/redux/features/newsSlice";
-import { fetchUsers } from "@/lib/redux/features/usersSlice";
-import type { WithId, NewsDoc } from "@/lib/api/news";
-import NewsList from "./_components/NewsList";
-import NewsFormModal from "./_components/NewsFormModal";
-import ConfirmDeleteModal from "@/components/ui/ConfirmDeleteModal";
-import { useContentNotification } from "@/lib/notifications/useContentNotification";
+import { useEffect, useMemo, useState } from 'react';
+import toast from 'react-hot-toast';
+import { useAppDispatch, useAppSelector } from '@/lib/redux/store';
+import AppButton, { AppButtonVariant } from '@/components/ui/AppButton';
+import Pagination from '@/components/ui/Pagination';
+import PagedGridPage from '@/components/ui/PagedGridPage';
+import { usePagedItems } from '@/lib/hooks/usePagedItems';
+import {
+  fetchNews,
+  createNews,
+  editNews,
+  removeNews,
+} from '@/lib/redux/features/newsSlice';
+import { fetchUsers } from '@/lib/redux/features/usersSlice';
+import { FUTURE_PUBLISH_ERROR } from '@/lib/api/news';
+import type { WithId, NewsDoc } from '@/lib/api/news';
+import NewsList from './_components/NewsList';
+import NewsFormModal from './_components/NewsFormModal';
+import ConfirmDeleteModal from '@/components/ui/ConfirmDeleteModal';
+import AppModal from '@/components/ui/AppModal';
+import { useContentNotification } from '@/lib/notifications/useContentNotification';
 
 export default function NewsClient() {
   const dispatch = useAppDispatch();
   const { items, status } = useAppSelector((s) => s.news);
   const users = useAppSelector((s) => s.users.items);
-  const loading = status === "loading";
+  const loading = status === 'loading';
   const { notifying, notify } = useContentNotification();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [modalType, setModalType] = useState<"add" | "edit">("add");
+  const [modalType, setModalType] = useState<'add' | 'edit'>('add');
   const [editingId, setEditingId] = useState<string | null>(null);
 
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  // Publishing and re-notifying both push to every user, so confirm first.
+  const [publishItem, setPublishItem] = useState<WithId<NewsDoc> | null>(
+    null,
+  );
+  const [publishing, setPublishing] = useState(false);
+  const [notifyItem, setNotifyItem] = useState<WithId<NewsDoc> | null>(null);
 
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isBatchDeleteOpen, setIsBatchDeleteOpen] = useState(false);
@@ -40,8 +54,8 @@ export default function NewsClient() {
 
   // Safety: ensure body scroll isn't stuck from previous modals/HMR on page mount
   useEffect(() => {
-    if (typeof document !== "undefined") {
-      document.body.style.overflow = "";
+    if (typeof document !== 'undefined') {
+      document.body.style.overflow = '';
     }
   }, []);
 
@@ -55,30 +69,69 @@ export default function NewsClient() {
   }, [items]);
 
   const openAdd = () => {
-    setModalType("add");
+    setModalType('add');
     setEditingId(null);
     setIsModalOpen(true);
   };
 
   const openEdit = (it: WithId<NewsDoc>) => {
-    setModalType("edit");
+    setModalType('edit');
     setEditingId(it.id);
     setIsModalOpen(true);
   };
 
   const closeModal = () => setIsModalOpen(false);
 
-  const initialItem = useMemo(() => (editingId ? items.find((x) => x.id === editingId) : undefined), [items, editingId]);
+  const initialItem = useMemo(
+    () => (editingId ? items.find((x) => x.id === editingId) : undefined),
+    [items, editingId],
+  );
 
   const handleSubmit = async (payload: NewsDoc) => {
     if (editingId) {
       await dispatch(editNews({ id: editingId, data: payload })).unwrap();
-      toast.success("News updated");
+      toast.success('News updated');
     } else {
       await dispatch(createNews(payload)).unwrap();
-      toast.success("News added");
+      toast.success('News added');
     }
     setIsModalOpen(false);
+  };
+
+  const openPublish = (it: WithId<NewsDoc>) => {
+    if (it.createdAt && new Date(it.createdAt).getTime() > Date.now()) {
+      toast.error(FUTURE_PUBLISH_ERROR);
+      return;
+    }
+    setPublishItem(it);
+  };
+
+  // news.ts stamps createdAt with the publish time, or rejects a future date.
+  const confirmPublish = async () => {
+    if (!publishItem) return;
+    setPublishing(true);
+    try {
+      await dispatch(
+        editNews({ id: publishItem.id, data: { status: 'published' } }),
+      ).unwrap();
+      toast.success('News published');
+    } catch (err) {
+      toast.error((err as { message?: string })?.message || 'Publish failed');
+    } finally {
+      setPublishing(false);
+      setPublishItem(null);
+    }
+  };
+
+  const confirmNotify = () => {
+    if (!notifyItem) return;
+    notify({
+      type: 'news',
+      id: notifyItem.id,
+      title: notifyItem.title,
+      imageUrl: notifyItem.imageUrl,
+    });
+    setNotifyItem(null);
   };
 
   const onDelete = (id: string) => {
@@ -90,9 +143,9 @@ export default function NewsClient() {
     if (!deleteId) return;
     try {
       await dispatch(removeNews(deleteId)).unwrap();
-      toast.success("News deleted");
+      toast.success('News deleted');
     } catch {
-      toast.error("Delete failed");
+      toast.error('Delete failed');
     } finally {
       setIsDeleteOpen(false);
       setDeleteId(null);
@@ -100,19 +153,22 @@ export default function NewsClient() {
   };
 
   const toggleSelect = (id: string) =>
-    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
 
   const allSelected = items.length > 0 && selectedIds.length === items.length;
 
-  const toggleSelectAll = () => setSelectedIds(allSelected ? [] : items.map((it) => it.id));
+  const toggleSelectAll = () =>
+    setSelectedIds(allSelected ? [] : items.map((it) => it.id));
 
   const confirmBatchDelete = async () => {
     if (selectedIds.length === 0) return;
     setBatchDeleting(true);
     const results = await Promise.allSettled(
-      selectedIds.map((id) => dispatch(removeNews(id)).unwrap())
+      selectedIds.map((id) => dispatch(removeNews(id)).unwrap()),
     );
-    const failed = results.filter((r) => r.status === "rejected").length;
+    const failed = results.filter((r) => r.status === 'rejected').length;
     const succeeded = results.length - failed;
     if (succeeded > 0) toast.success(`${succeeded} news deleted`);
     if (failed > 0) toast.error(`${failed} failed to delete`);
@@ -128,35 +184,41 @@ export default function NewsClient() {
       <PagedGridPage
         toolbar={
           <>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <h2 className="text-xl font-semibold text-primary-800">News</h2>
-            <div className="flex flex-wrap items-center gap-3">
-              {items.length > 0 && (
-                <>
-                  <label className="flex items-center gap-2 text-sm text-primary-700">
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4 rounded border-primary-300 accent-red-600"
-                      checked={allSelected}
-                      onChange={toggleSelectAll}
-                    />
-                    <span>Select all</span>
-                  </label>
-                  {selectedIds.length > 0 && (
-                    <AppButton
-                      variant={AppButtonVariant.Delete}
-                      className="px-3 py-1 text-xs"
-                      onClick={() => setIsBatchDeleteOpen(true)}
-                      disabled={batchDeleting}
-                    >
-                      Delete Selected ({selectedIds.length})
-                    </AppButton>
-                  )}
-                </>
-              )}
-              <AppButton variant={AppButtonVariant.Add} onClick={openAdd} disabled={loading}>Add News</AppButton>
+            <div className='flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
+              <h2 className='text-xl font-semibold text-primary-800'>News</h2>
+              <div className='flex flex-wrap items-center gap-3'>
+                {items.length > 0 && (
+                  <>
+                    <label className='flex items-center gap-2 text-sm text-primary-700'>
+                      <input
+                        type='checkbox'
+                        className='h-4 w-4 rounded border-primary-300 accent-red-600'
+                        checked={allSelected}
+                        onChange={toggleSelectAll}
+                      />
+                      <span>Select all</span>
+                    </label>
+                    {selectedIds.length > 0 && (
+                      <AppButton
+                        variant={AppButtonVariant.Delete}
+                        className='px-3 py-1 text-xs'
+                        onClick={() => setIsBatchDeleteOpen(true)}
+                        disabled={batchDeleting}
+                      >
+                        Delete Selected ({selectedIds.length})
+                      </AppButton>
+                    )}
+                  </>
+                )}
+                <AppButton
+                  variant={AppButtonVariant.Add}
+                  onClick={openAdd}
+                  disabled={loading}
+                >
+                  Add News
+                </AppButton>
+              </div>
             </div>
-          </div>
           </>
         }
         pager={<Pagination {...paginationProps} />}
@@ -167,14 +229,8 @@ export default function NewsClient() {
           notifying={notifying}
           onEdit={openEdit}
           onDelete={onDelete}
-          onNotify={(it) =>
-            notify({
-              type: "news",
-              id: it.id,
-              title: it.title,
-              imageUrl: it.imageUrl,
-            })
-          }
+          onPublish={openPublish}
+          onNotify={setNotifyItem}
           selectedIds={selectedIds}
           onToggleSelect={toggleSelect}
         />
@@ -189,6 +245,55 @@ export default function NewsClient() {
         users={users}
       />
 
+      {/* Publish Modal */}
+      <AppModal
+        open={!!publishItem}
+        type='edit'
+        title='Publish news?'
+        onClose={() => !publishing && setPublishItem(null)}
+        footer={
+          <AppButton
+            variant={AppButtonVariant.Add}
+            onClick={confirmPublish}
+            disabled={publishing}
+          >
+            {publishing ? 'Publishing...' : 'Publish'}
+          </AppButton>
+        }
+      >
+        <p className='text-sm text-primary-800'>
+          Publishing sends a push notification to all users. The news will be
+          dated now.
+        </p>
+      </AppModal>
+
+      {/* Send-again Modal */}
+      <AppModal
+        open={!!notifyItem}
+        type='edit'
+        title='Send notification again?'
+        onClose={() => setNotifyItem(null)}
+        footer={
+          <AppButton
+            variant={AppButtonVariant.Add}
+            onClick={confirmNotify}
+            disabled={notifying}
+          >
+            Send again
+          </AppButton>
+        }
+      >
+        <p className='text-sm text-primary-800'>
+          Users were already notified when this was published. Send another
+          notification?
+        </p>
+        {notifyItem?.notifiedAt && (
+          <p className='mt-2 text-xs text-primary-600'>
+            Last sent {new Date(notifyItem.notifiedAt).toLocaleString()}
+          </p>
+        )}
+      </AppModal>
+
       {/* Delete Modal */}
       <ConfirmDeleteModal
         open={isDeleteOpen}
@@ -197,16 +302,16 @@ export default function NewsClient() {
           setDeleteId(null);
         }}
         onConfirm={confirmDelete}
-        confirmLabel="Delete"
+        confirmLabel='Delete'
       />
 
       {/* Batch Delete Modal */}
       <ConfirmDeleteModal
         open={isBatchDeleteOpen}
-        title={`Delete ${selectedIds.length} selected news item${selectedIds.length === 1 ? "" : "s"}?`}
+        title={`Delete ${selectedIds.length} selected news item${selectedIds.length === 1 ? '' : 's'}?`}
         onCancel={() => setIsBatchDeleteOpen(false)}
         onConfirm={confirmBatchDelete}
-        confirmLabel={batchDeleting ? "Deleting..." : "Delete All"}
+        confirmLabel={batchDeleting ? 'Deleting...' : 'Delete All'}
         disabled={batchDeleting}
       />
     </>
