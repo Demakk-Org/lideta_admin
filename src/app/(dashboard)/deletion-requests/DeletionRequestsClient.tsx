@@ -256,7 +256,7 @@ export default function DeletionRequestsClient() {
         open={confirmingId !== null}
         title={
           confirmingRequest
-            ? `Permanently delete the account for ${confirmingRequest.contact}? Its profile and saved activity go with it, and this cannot be undone.`
+            ? `Permanently delete the account for ${confirmingRequest.contact}? Its profile, saved activity and any counseling conversations go with it, and this cannot be undone.`
             : 'Delete this account?'
         }
         confirmLabel="Delete account"

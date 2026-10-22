@@ -115,8 +115,9 @@ export default function UsersFormModal({
               onChange={(e) => setRoleVal((e.target.value as UserRole) || "")}
               className="mt-1 block w-full rounded-md border border-primary-300 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
             >
-              <option value="">User (no admin)</option>
-              <option value={UserRole.Admin}>Admin</option>
+              <option value="">User</option>
+              <option value={UserRole.Counselor}>Counselor</option>
+              <option value={UserRole.Admin}>Admin (can also counsel)</option>
             </select>
           </div>
           <div className="sm:col-span-2">

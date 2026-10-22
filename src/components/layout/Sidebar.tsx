@@ -17,6 +17,7 @@ import {
   FlagIcon,
   TrashIcon,
   AdjustmentsHorizontalIcon,
+  ChatBubbleLeftRightIcon,
 } from '@heroicons/react/24/outline';
 import toast from 'react-hot-toast';
 import { signOutUser } from '@/lib/api/auth';
@@ -70,6 +71,7 @@ const navigation = [
   { name: 'Audios', href: '/audios', icon: SpeakerWaveIcon },
   { name: 'Videos', href: '/videos', icon: VideoCameraIcon },
   { name: 'Users', href: '/users', icon: UsersIcon },
+  { name: 'Counseling', href: '/counseling', icon: ChatBubbleLeftRightIcon },
   { name: 'Reports', href: '/reports', icon: FlagIcon },
   {
     name: 'Deletion Requests',
