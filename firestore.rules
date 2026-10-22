@@ -10,11 +10,31 @@ service cloud.firestore {
         get(/databases/$(db)/documents/users/$(request.auth.uid)).data.role == 'ADMIN';
     }
 
-    // Owner-only: user profile + all subcollections
-    // (meta/streak, daily_verse_reads, etc.)
-    match /users/{uid}/{document=**} {
-      allow read, write: if request.auth != null;
-                         // && request.auth.uid == uid;
+    // ADMIN can counsel too: `role` holds a single value.
+    function isCounselor() {
+      return request.auth != null &&
+        get(/databases/$(db)/documents/users/$(request.auth.uid)).data.get('role', null)
+          in ['COUNSELOR', 'ADMIN'];
+    }
+
+    function isOwner(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    // Profiles stay readable to members: study chat shows other members' names.
+    // `role` is admin-only, or anyone could make themselves an admin.
+    match /users/{uid} {
+      allow read: if request.auth != null;
+      allow create: if isAdmin() || (isOwner(uid) && !('role' in request.resource.data));
+      allow update: if isAdmin() || (isOwner(uid)
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role']));
+      allow delete: if isOwner(uid) || isAdmin();
+    }
+
+    // Owner-only subcollections (meta/streak, daily_verse_reads, notifications…).
+    // `{sub}` keeps this from matching the profile doc itself.
+    match /users/{uid}/{sub}/{document=**} {
+      allow read, write: if isOwner(uid) || isAdmin();
     }
 
     // App-global content: read for any signed-in user,
@@ -29,10 +49,22 @@ service cloud.firestore {
     match /bible_sources/{docId}           { allow read: if request.auth != null; allow write: if isAdmin(); }
     match /books/{docId}                   { allow read: if request.auth != null; allow write: if isAdmin(); }
     match /quizzes/{docId}                 { allow read: if request.auth != null; allow write: if isAdmin(); }
-    match /courses/{docId}                 { allow read, write, update: if request.auth != null; }
-    match /courses/{courseId}/lessons/{docId}                 { allow read, write, update: if request.auth != null; }
+    match /courses/{docId}                 { allow read: if request.auth != null; allow write: if isAdmin(); }
+    match /courses/{courseId}/lessons/{docId} { allow read: if request.auth != null; allow write: if isAdmin(); }
     match /course_categories/{docId}       { allow read: if request.auth != null; allow write: if isAdmin(); }
-    match /course_progress/{docId}         { allow read, write, update: if request.auth != null; }
+    // Doc id is `{courseId}:{uid}`; resource == null lets the app probe a course it hasn't started.
+    match /course_progress/{docId} {
+      allow read: if request.auth != null
+        && (resource == null || resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if request.auth != null
+        && request.resource.data.userId == request.auth.uid
+        && docId == request.resource.data.courseId + ':' + request.auth.uid;
+      allow update: if request.auth != null
+        && resource.data.userId == request.auth.uid
+        && request.resource.data.userId == request.auth.uid;
+      allow delete: if isAdmin();
+    }
+
     match /quiz_categories/{docId}         { allow read: if request.auth != null; allow write: if isAdmin(); }
     match /quiz_attempts/{docId}           { allow read, write: if request.auth != null; }
     match /audios/{docId}                  { allow read: if request.auth != null; allow write: if isAdmin(); }
@@ -179,6 +211,74 @@ service cloud.firestore {
         resource.data.senderId == request.auth.uid ||
         get(/databases/$(db)/documents/bible_study_groups/$(groupId)).data.leader == request.auth.uid
       );
+    }
+
+    // ── Counseling ──
+    // Requesters are known only by the `cid` claim set by the backend; the
+    // uid → cid mapping and audit log never reach a client. Staff docs carry a
+    // per-request key, so staff can't link one person's requests. Admins
+    // triage requests but cannot read sessions. All request/session writes go
+    // through callables.
+    function myCid() {
+      return request.auth != null ? request.auth.token.get('cid', null) : null;
+    }
+
+    // Must mirror requesterKey() in cloud_functions counseling/shared.ts.
+    function isRequester(data, requestId) {
+      return myCid() != null
+        && data.requesterKey == hashing.sha256(myCid() + ':' + requestId).toHexString().lower();
+    }
+
+    function isCurrentCounselor(data) {
+      return request.auth != null
+        && data.assignedCounselorId == request.auth.uid
+        && isCounselor();
+    }
+
+    match /counseling_identity_mappings/{id} { allow read, write: if false; }
+    match /counseling_audit_logs/{id}        { allow read, write: if false; }
+
+    match /counseling_requests/{requestId} {
+      // Requesters fetch by id; their list comes from listMyCounselingRequests.
+      allow get: if isAdmin() || isRequester(resource.data, requestId) || isCurrentCounselor(resource.data);
+      allow list: if isAdmin() || isCurrentCounselor(resource.data);
+      allow write: if false;
+    }
+
+    match /counseling_sessions/{sessionId} {
+      function session() {
+        return get(/databases/$(db)/documents/counseling_sessions/$(sessionId)).data;
+      }
+
+      allow get: if isRequester(resource.data, sessionId) || isCurrentCounselor(resource.data);
+      allow list: if isCurrentCounselor(resource.data);
+      allow write: if false;
+
+      // Read through the session doc, so a reassignment revokes the old counselor at once.
+      match /messages/{messageId} {
+        function validMessage(d) {
+          return d.keys().hasOnly(['senderId', 'senderType', 'content', 'timestamp',
+                   'isEdited', 'isSystem', 'attachments', 'mentionedUserIds',
+                   'replyToMessageId', 'type'])
+            && d.content is string && d.content.size() > 0 && d.content.size() <= 4000
+            && d.timestamp == request.time
+            && d.isEdited == false && d.isSystem == false
+            && d.attachments == [] && d.mentionedUserIds == []
+            && d.get('replyToMessageId', null) == null
+            && d.type == 'text';
+        }
+
+        allow read: if isRequester(session(), sessionId) || isCurrentCounselor(session());
+        allow create: if session().status == 'active'
+          && validMessage(request.resource.data)
+          && ((isRequester(session(), sessionId)
+                && request.resource.data.senderType == 'requester'
+                && request.resource.data.senderId == session().alias)
+            || (isCurrentCounselor(session())
+                && request.resource.data.senderType == 'counselor'
+                && request.resource.data.senderId == request.auth.uid));
+        allow update, delete: if false;
+      }
     }
   }
 }

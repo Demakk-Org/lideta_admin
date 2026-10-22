@@ -6,7 +6,8 @@
  * DISABLED, so every key in `src/lib/featureKeys.ts` is written explicitly.
  * Every write goes through a version, like a publish from the dashboard:
  *
- *   - nothing published: publish a new version with every key `true`. If the
+ *   - nothing published: publish a new version with every key `true` (keys
+ *     marked `seedOff` get `false`). If the
  *     pre-versioning `app_settings/default` exists, its values are imported
  *     first, so switches an admin already turned off stay off;
  *   - something published but missing keys: publish a new version copied
@@ -35,6 +36,7 @@ import {
   APP_SETTINGS_PUBLISHED_DOC_ID,
   APP_SETTINGS_VERSIONS_COLLECTION,
   FEATURE_KEYS,
+  SEED_OFF_KEYS,
 } from '../src/lib/featureKeys.ts';
 
 export const SEED_ACTOR = 'script:seed-app-settings';
@@ -73,7 +75,11 @@ function featuresOf(data) {
  *                   the new version is numbered one past it, so it never
  *                   collides with a draft
  */
-export function planSeed({ published, legacy, latestVersion }, keys = FEATURE_KEYS) {
+export function planSeed(
+  { published, legacy, latestVersion },
+  keys = FEATURE_KEYS,
+  offKeys = SEED_OFF_KEYS,
+) {
   const publishedFeatures = featuresOf(published);
   const legacyFeatures = featuresOf(legacy);
   const base = publishedFeatures ?? legacyFeatures ?? {};
@@ -93,7 +99,10 @@ export function planSeed({ published, legacy, latestVersion }, keys = FEATURE_KE
   }
 
   const version = (Number.isInteger(latestVersion) ? latestVersion : 0) + 1;
-  const features = { ...base, ...Object.fromEntries(added.map((k) => [k, true])) };
+  const features = {
+    ...base,
+    ...Object.fromEntries(added.map((k) => [k, !offKeys.includes(k)])),
+  };
   const note =
     source === 'published'
       ? `Seed: added ${added.join(', ')}`
@@ -118,8 +127,8 @@ function report(plan) {
           : 'every feature on';
     console.log(`Will publish version ${plan.version}: ${from}.`);
     if (plan.added.length) {
-      console.log(`Keys added as true (${plan.added.length}):`);
-      for (const k of plan.added) console.log(`  + ${k}`);
+      console.log(`Keys added (${plan.added.length}):`);
+      for (const k of plan.added) console.log(`  + ${k} = ${plan.features[k]}`);
     }
   }
 

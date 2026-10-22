@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminAuth, adminDb } from '@/lib/firebase/admin';
 import { NotAdminError, requireAdmin } from '@/lib/server/requireAdmin';
+import { purgeCounselingForUser } from '@/lib/server/purgeCounseling';
 import Logger from '@/lib/utils/logger';
 
 export const runtime = 'nodejs';
@@ -95,6 +96,7 @@ export async function DELETE(
       });
     }
 
+    const counselingDeleted = await purgeCounselingForUser(uid, admin.uid);
     await deleteSubcollections(uid);
     await adminDb.collection('users').doc(uid).delete();
     await adminAuth.deleteUser(uid);
@@ -104,10 +106,11 @@ export async function DELETE(
       deletedUid: uid,
       handledBy: admin.email ?? admin.uid,
       resolutionNote: 'Account and profile data deleted.',
+      counselingRequestsDeleted: counselingDeleted,
       updatedAt: new Date().toISOString(),
     });
 
-    Logger.info(routeName, 'Account deleted', { id, uid });
+    Logger.info(routeName, 'Account deleted', { id, uid, counselingDeleted });
     return NextResponse.json({
       deletedUid: uid,
       message: 'Account and profile data deleted.',

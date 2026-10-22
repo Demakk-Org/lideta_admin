@@ -3,6 +3,7 @@ import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import { getDatabase } from 'firebase/database';
+import { getFunctions } from 'firebase/functions';
 
 // Prefer environment variables; fall back to provided web config so the app works out of the box
 const firebaseConfig = {
@@ -21,5 +22,7 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const database = getDatabase(app);
 const storage = getStorage(app);
+// us-central1, where the counseling callables run.
+const functions = getFunctions(app);
 
-export { app, auth, db, database, storage };
+export { app, auth, db, database, storage, functions };

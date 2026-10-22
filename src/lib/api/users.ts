@@ -3,6 +3,7 @@ import { collection, deleteField, doc, getDocs, query, updateDoc, type UpdateDat
 
 export enum UserRole {
   Admin = 'ADMIN',
+  Counselor = 'COUNSELOR',
 }
 
 export type UserDoc = {
@@ -11,7 +12,7 @@ export type UserDoc = {
   phoneNumber?: string;
   age?: number;
   imageUrl?: string;
-  role?: UserRole; // undefined => not admin
+  role?: UserRole; // undefined => regular user
 };
 
 export type WithId<T> = T & { id: string };
@@ -26,7 +27,7 @@ function normalizeNumber(val: unknown): number | undefined {
 
 function normalizeRole(val: unknown): UserRole | undefined {
   const s = String(val ?? '').toUpperCase();
-  return s === UserRole.Admin ? UserRole.Admin : undefined;
+  return (Object.values(UserRole) as string[]).includes(s) ? (s as UserRole) : undefined;
 }
 
 export async function listUsers(): Promise<WithId<UserDoc>[]> {
@@ -74,7 +75,7 @@ export async function updateUser(id: string, data: Partial<UserDoc>): Promise<vo
     }
     if (Object.prototype.hasOwnProperty.call(data, 'role')) {
       const r = normalizeRole((data as Record<string, unknown>)['role']);
-      // If not ADMIN, remove role field to represent non-admin
+      // No role => regular user, so drop the field
       toWrite.role = r ? r : (deleteField() as any);
     }
     await updateDoc(doc(colRef, id), toWrite);
