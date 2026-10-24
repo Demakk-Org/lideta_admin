@@ -218,25 +218,36 @@ service cloud.firestore {
     // uid → cid mapping and audit log never reach a client. Staff docs carry a
     // per-request key, so staff can't link one person's requests. Admins
     // triage requests but cannot read sessions. All request/session writes go
-    // through callables.
+    // through callables. Requesters and counselors also need a recent
+    // server-checked PIN; admins on the dashboard don't.
     function myCid() {
       return request.auth != null ? request.auth.token.get('cid', null) : null;
+    }
+
+    // Written only by verifyCounselingPin/setCounselingPin.
+    function pinUnlocked() {
+      let unlock = /databases/$(db)/documents/counseling_unlocks/$(request.auth.uid);
+      return exists(unlock) && get(unlock).data.expiresAt > request.time;
     }
 
     // Must mirror requesterKey() in cloud_functions counseling/shared.ts.
     function isRequester(data, requestId) {
       return myCid() != null
+        && pinUnlocked()
         && data.requesterKey == hashing.sha256(myCid() + ':' + requestId).toHexString().lower();
     }
 
     function isCurrentCounselor(data) {
       return request.auth != null
         && data.assignedCounselorId == request.auth.uid
-        && isCounselor();
+        && isCounselor()
+        && pinUnlocked();
     }
 
     match /counseling_identity_mappings/{id} { allow read, write: if false; }
     match /counseling_audit_logs/{id}        { allow read, write: if false; }
+    match /counseling_pins/{id}              { allow read, write: if false; }
+    match /counseling_unlocks/{id}           { allow read, write: if false; }
 
     match /counseling_requests/{requestId} {
       // Requesters fetch by id; their list comes from listMyCounselingRequests.

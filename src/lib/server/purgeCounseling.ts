@@ -5,6 +5,8 @@ const MAPPINGS = 'counseling_identity_mappings';
 const REQUESTS = 'counseling_requests';
 const SESSIONS = 'counseling_sessions';
 const AUDIT = 'counseling_audit_logs';
+const PINS = 'counseling_pins';
+const UNLOCKS = 'counseling_unlocks';
 
 /**
  * Deletes a member's counseling requests, sessions and messages, then the
@@ -15,6 +17,9 @@ export async function purgeCounselingForUser(
   uid: string,
   adminUid: string,
 ): Promise<number> {
+  await adminDb.collection(PINS).doc(uid).delete();
+  await adminDb.collection(UNLOCKS).doc(uid).delete();
+
   const mappingRef = adminDb.collection(MAPPINGS).doc(uid);
   const mapping = await mappingRef.get();
   if (!mapping.exists) return 0;
