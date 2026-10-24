@@ -13,6 +13,7 @@ import {
   QuestionMarkCircleIcon,
   AcademicCapIcon,
   ArrowRightIcon,
+  ChatBubbleLeftRightIcon,
 } from '@heroicons/react/24/outline';
 
 type Feature = {
@@ -95,6 +96,12 @@ const featureGroups: FeatureGroup[] = [
         href: '/event-categories',
         description: 'Group events into categories for easier browsing.',
         icon: CalendarDaysIcon,
+      },
+      {
+        name: 'Counseling',
+        href: '/counseling',
+        description: 'Triage anonymous counseling requests and assign counselors.',
+        icon: ChatBubbleLeftRightIcon,
       },
     ],
   },

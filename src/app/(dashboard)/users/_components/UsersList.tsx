@@ -59,10 +59,12 @@ export default function UsersList({
                     className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
                       it.role === UserRole.Admin
                         ? "bg-primary-100 text-primary-800"
-                        : "bg-gray-100 text-gray-600"
+                        : it.role === UserRole.Counselor
+                          ? "bg-emerald-100 text-emerald-800"
+                          : "bg-gray-100 text-gray-600"
                     }`}
                   >
-                    {it.role === UserRole.Admin ? "Admin" : "User"}
+                    {it.role === UserRole.Admin ? "Admin" : it.role === UserRole.Counselor ? "Counselor" : "User"}
                   </span>
                 </td>
                 <td className="px-4 py-2 text-sm">

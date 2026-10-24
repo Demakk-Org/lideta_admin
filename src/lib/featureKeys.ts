@@ -33,6 +33,8 @@ export type FeatureDefinition = {
   group: FeatureGroup;
   /** Features that must be on for this one to work. */
   dependsOn: readonly string[];
+  /** The seed adds this key as `false` instead of `true`, for features launched dark. */
+  seedOff?: boolean;
 };
 
 export const FEATURE_GROUPS: ReadonlyArray<{
@@ -106,6 +108,15 @@ export const FEATURES = [
     description: 'Meeting summaries inside a bible study.',
     group: 'community',
     dependsOn: ['bibleStudy'],
+  },
+  {
+    key: 'counseling',
+    label: 'Counseling',
+    labelAm: 'ምክክር',
+    description: 'Anonymous counseling requests and private counselor chat. Signed-in members only.',
+    group: 'community',
+    dependsOn: [],
+    seedOff: true,
   },
 
   // Media & content
@@ -222,6 +233,13 @@ export const FEATURES = [
 export type FeatureKey = (typeof FEATURES)[number]['key'];
 
 export const FEATURE_KEYS: readonly FeatureKey[] = FEATURES.map((f) => f.key);
+
+/** Keys the seed adds as `false`. */
+export const SEED_OFF_KEYS: readonly FeatureKey[] = (
+  FEATURES as readonly FeatureDefinition[]
+)
+  .filter((f) => f.seedOff)
+  .map((f) => f.key as FeatureKey);
 
 export function isFeatureKey(key: string): key is FeatureKey {
   return (FEATURE_KEYS as readonly string[]).includes(key);
