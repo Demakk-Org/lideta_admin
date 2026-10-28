@@ -249,6 +249,22 @@ service cloud.firestore {
     match /counseling_pins/{id}              { allow read, write: if false; }
     match /counseling_unlocks/{id}           { allow read, write: if false; }
 
+    // A bare "something changed" flag, written by the backend. Not PIN-gated
+    // so the app can show a dot before unlock; it holds no request ids.
+    match /counseling_badges/{uid} {
+      allow get: if request.auth != null && request.auth.uid == uid;
+      allow list, write: if false;
+    }
+
+    // Per-person counseling notifications. Unlike users/{uid}/notifications,
+    // admins can't read these: they'd reveal who has counseling requests.
+    match /counseling_inbox/{uid}/items/{itemId} {
+      allow read, delete: if request.auth != null && request.auth.uid == uid;
+      allow update: if request.auth != null && request.auth.uid == uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isRead']);
+      allow create: if false;
+    }
+
     match /counseling_requests/{requestId} {
       // Requesters fetch by id; their list comes from listMyCounselingRequests.
       allow get: if isAdmin() || isRequester(resource.data, requestId) || isCurrentCounselor(resource.data);
