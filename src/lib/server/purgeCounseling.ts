@@ -7,6 +7,8 @@ const SESSIONS = 'counseling_sessions';
 const AUDIT = 'counseling_audit_logs';
 const PINS = 'counseling_pins';
 const UNLOCKS = 'counseling_unlocks';
+const BADGES = 'counseling_badges';
+const INBOX = 'counseling_inbox';
 
 /**
  * Deletes a member's counseling requests, sessions and messages, then the
@@ -19,6 +21,9 @@ export async function purgeCounselingForUser(
 ): Promise<number> {
   await adminDb.collection(PINS).doc(uid).delete();
   await adminDb.collection(UNLOCKS).doc(uid).delete();
+  await adminDb.collection(BADGES).doc(uid).delete();
+  // recursiveDelete also removes the items subcollection.
+  await adminDb.recursiveDelete(adminDb.collection(INBOX).doc(uid));
 
   const mappingRef = adminDb.collection(MAPPINGS).doc(uid);
   const mapping = await mappingRef.get();
